@@ -181,14 +181,30 @@ pub fn deinline_opt(
             (root_set.clone(), full_tree_set)
         })
         .collect();
+    #[allow(clippy::type_complexity)]
+    let mut root_set_to_inline_tree_vec: Vec<(&BTreeSet<Vec<u8>>, Vec<&Vec<u8>>)> =
+        root_set_to_inline_tree
+            .iter()
+            .map(|(k, function_set)| {
+                let mut fset_vec: Vec<&Vec<u8>> = function_set.iter().collect();
 
-    for (_, function_set) in root_set_to_inline_tree.iter() {
+                // Sort which normalizes order.
+                fset_vec.sort();
+
+                (k, fset_vec)
+            })
+            .collect();
+
+    // Sort which normalizes order.
+    root_set_to_inline_tree_vec.sort();
+
+    for (_, function_set) in root_set_to_inline_tree_vec.iter() {
         loop {
             let start_metric = metric;
 
             for f in function_set.iter() {
                 // Get index of helper identified by this leaf name.
-                let i = if let Some(i) = helper_to_index.get(f) {
+                let i = if let Some(i) = helper_to_index.get(*f) {
                     *i
                 } else {
                     return Err(CompileErr(

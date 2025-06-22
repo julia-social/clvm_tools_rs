@@ -48,10 +48,6 @@ rand = "0.9.0"
 rand_chacha = "0.9.0"
 lfsr = "0.3.0"
 
-[lib]
-name = "clvm_tools_rs"
-crate-type = ["cdylib", "rlib"]
-
 [features]
 extension-module = ["dep:pyo3"]
 fuzz = ["dep:rand", "dep:rand_chacha", "dep:lfsr"]
