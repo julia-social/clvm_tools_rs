@@ -23,7 +23,7 @@ use crate::compiler::srcloc::Srcloc;
 
 #[derive(Debug)]
 pub struct GenError {
-    pub message: String,
+    message: String,
 }
 impl From<&str> for GenError {
     fn from(m: &str) -> GenError {
