@@ -41,10 +41,13 @@ jobs:
       with:
         python-version: 3.11
 
+    - uses: chia-network/actions/create-venv@main
+      id: create-venv
+
+    - uses: chia-network/actions/activate-venv@main
+
     - name: Update pip and dependencies
       run: |
-        python -m venv venv
-        source ./venv/activate
         python -m pip install --upgrade pip maturin==1.10.2
 
     - name: Set up rust
