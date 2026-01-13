@@ -24,7 +24,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         fetch-depth: 1
 
@@ -45,7 +45,7 @@ jobs:
         pip install maturin==1.7.0
         CC=gcc maturin build --release --strip --manylinux 2_28
     - name: Upload artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: wheels
         path: target/wheels/
@@ -60,7 +60,7 @@ jobs:
     needs: build_wheels
     steps:
     - name: Fetch wheels from previous job
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v6
       with:
         name: wheels
         path: target/wheels/
