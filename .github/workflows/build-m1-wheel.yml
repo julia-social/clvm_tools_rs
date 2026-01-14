@@ -117,7 +117,7 @@ jobs:
         pytest
 
     - name: Upload wheels
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: wheels
         path: ./target/wheels
