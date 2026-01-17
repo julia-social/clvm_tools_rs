@@ -40,7 +40,7 @@ chia-bls = "0.32.0"
 
 [dependencies.pyo3]
 version = "0.24.1"
-features = ["abi3-py39", "extension-module"]
+features = ["abi3-py310", "extension-module"]
 optional = true
 
 [dev-dependencies]
