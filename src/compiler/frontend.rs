@@ -89,6 +89,8 @@ fn collect_used_names_helperform(body: &HelperForm) -> Vec<Vec<u8>> {
             res
         }
         HelperForm::Defun(_, defun) => collect_used_names_bodyform(&defun.body),
+        HelperForm::Defnamespace(_ns) => Vec::new(),
+        HelperForm::Defnsref(_ns) => Vec::new(),
     }
 }
 

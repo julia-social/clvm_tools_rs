@@ -5,7 +5,7 @@ use std::rc::Rc;
 use crate::compiler::codegen::toposort_assign_bindings;
 use crate::compiler::comptypes::{
     map_m, map_m_reverse, Binding, BindingPattern, BodyForm, CompileErr, CompileForm, DefconstData,
-    DefmacData, DefunData, HelperForm, LambdaData, LetData, LetFormKind,
+    DefmacData, DefunData, HelperForm, LambdaData, LetData, LetFormKind, NamespaceData,
 };
 use crate::compiler::gensym::gensym;
 use crate::compiler::sexp::SExp;
@@ -420,6 +420,8 @@ fn rename_in_helperform(
                 ..*defun.clone()
             }),
         )),
+        HelperForm::Defnamespace(_ns) => todo!(),
+        HelperForm::Defnsref(_ns) => todo!(),
     }
 }
 
@@ -469,6 +471,14 @@ pub fn rename_args_helperform(h: &HelperForm) -> Result<HelperForm, CompileErr> 
                 }),
             ))
         }
+        HelperForm::Defnamespace(ns) => {
+            let renamed = map_m(rename_args_helperform, &ns.helpers)?;
+            Ok(HelperForm::Defnamespace(Box::new(NamespaceData {
+                helpers: renamed,
+                ..*ns.clone()
+            })))
+        }
+        HelperForm::Defnsref(_) => Ok(h.clone()),
     }
 }
 
