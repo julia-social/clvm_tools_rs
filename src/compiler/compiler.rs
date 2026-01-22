@@ -314,17 +314,12 @@ impl CompilerOpts for DefaultCompilerOpts {
     }
     fn compile_program(
         &self,
-        allocator: &mut Allocator,
-        runner: Rc<dyn TRunProgram>,
+        context: &mut BasicCompileContext,
         sexp: Rc<SExp>,
-        symbol_table: &mut HashMap<String, String>,
     ) -> Result<SExp, CompileErr> {
         let _int_conversion_bug = NewStyleIntConversion::new(self.dialect.int_fix);
         let me = Rc::new(self.clone());
-        let optimizer = get_optimizer(&sexp.loc(), me.clone())?;
-        let mut context_wrapper =
-            CompileContextWrapper::new(allocator, runner, symbol_table, optimizer);
-        compile_pre_forms(&mut context_wrapper.context, me, &[sexp])
+        compile_pre_forms(context, me, &[sexp])
     }
 }
 
