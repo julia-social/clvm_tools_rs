@@ -7,8 +7,8 @@ use crate::classic::clvm::__type_compatibility__::bi_one;
 use crate::compiler::comptypes::{
     list_to_cons, ArgsAndTail, Binding, BindingPattern, BodyForm, CompileErr, CompileForm,
     CompilerOpts, ConstantKind, DefconstData, DefmacData, DefunData, HelperForm, ImportLongName,
-    IncludeDesc, LetData, LetFormInlineHint, LetFormKind, LongNameTranslation, ModAccum, ModuleImportSpec,
-    NamespaceData, NamespaceRefData,
+    IncludeDesc, LetData, LetFormInlineHint, LetFormKind, LongNameTranslation, ModAccum,
+    ModuleImportSpec, NamespaceData, NamespaceRefData,
 };
 use crate::compiler::lambda::handle_lambda;
 use crate::compiler::preprocessor::preprocess;
@@ -1001,7 +1001,9 @@ pub fn compute_live_helpers(
 
     helper_list
         .iter()
-        .filter(|h| !opts.frontend_check_live() || is_namespace_decl(h) || helper_names.contains(h.name()))
+        .filter(|h| {
+            !opts.frontend_check_live() || is_namespace_decl(h) || helper_names.contains(h.name())
+        })
         .cloned()
         .collect()
 }
