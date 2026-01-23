@@ -6,8 +6,9 @@ use std::rc::Rc;
 use crate::classic::clvm::__type_compatibility__::bi_one;
 use crate::compiler::comptypes::{
     list_to_cons, ArgsAndTail, Binding, BindingPattern, BodyForm, CompileErr, CompileForm,
-    CompilerOpts, ConstantKind, DefconstData, DefmacData, DefunData, HelperForm, IncludeDesc,
-    LetData, LetFormInlineHint, LetFormKind, ModAccum,
+    CompilerOpts, ConstantKind, DefconstData, DefmacData, DefunData, HelperForm, ImportLongName,
+    IncludeDesc, LetData, LetFormInlineHint, LetFormKind, LongNameTranslation, ModAccum, ModuleImportSpec,
+    NamespaceData, NamespaceRefData,
 };
 use crate::compiler::lambda::handle_lambda;
 use crate::compiler::preprocessor::preprocess;
@@ -640,6 +641,7 @@ struct OpName4Match {
     name: Vec<u8>,
     args: Rc<SExp>,
     body: Rc<SExp>,
+    orig: Vec<SExp>,
 }
 
 #[allow(clippy::type_complexity)]
@@ -648,7 +650,7 @@ fn match_op_name_4(pl: &[SExp]) -> Option<OpName4Match> {
         return None;
     }
 
-    match &pl[0] {
+    match &pl[0].atomize() {
         SExp::Atom(l, op_name) => {
             if pl.len() < 3 {
                 return Some(OpName4Match {
@@ -658,13 +660,15 @@ fn match_op_name_4(pl: &[SExp]) -> Option<OpName4Match> {
                     name: Vec::new(),
                     args: Rc::new(SExp::Nil(l.clone())),
                     body: Rc::new(SExp::Nil(l.clone())),
+                    orig: pl.to_owned(),
                 });
             }
 
-            match &pl[1] {
+            match &pl[1].atomize() {
                 SExp::Atom(ll, name) => {
+                    let tail_idx = 3;
                     let mut tail_list = Vec::new();
-                    for elt in pl.iter().skip(3) {
+                    for elt in pl.iter().skip(tail_idx) {
                         tail_list.push(Rc::new(elt.clone()));
                     }
                     Some(OpName4Match {
@@ -674,6 +678,7 @@ fn match_op_name_4(pl: &[SExp]) -> Option<OpName4Match> {
                         name: name.clone(),
                         args: Rc::new(pl[2].clone()),
                         body: Rc::new(enlist(l.clone(), &tail_list)),
+                        orig: pl.to_owned(),
                     })
                 }
                 _ => Some(OpName4Match {
@@ -683,11 +688,91 @@ fn match_op_name_4(pl: &[SExp]) -> Option<OpName4Match> {
                     name: Vec::new(),
                     args: Rc::new(SExp::Nil(l.clone())),
                     body: Rc::new(SExp::Nil(l.clone())),
+                    orig: pl.to_owned(),
                 }),
             }
         }
         _ => None,
     }
+}
+
+pub fn compile_namespace(
+    opts: Rc<dyn CompilerOpts>,
+    loc: Srcloc,
+    internal: &[SExp],
+) -> Result<HelperForm, CompileErr> {
+    if internal.len() < 2 {
+        return Err(CompileErr(loc, "Namespace must have a name".to_string()));
+    }
+
+    let (_, parsed) = if let SExp::Atom(_, name) = &internal[1] {
+        ImportLongName::parse(name)
+    } else {
+        return Err(CompileErr(
+            internal[1].loc(),
+            "Namespace name must be an atom".to_string(),
+        ));
+    };
+
+    let mut helpers = Vec::new();
+    for sexp in internal.iter().skip(2) {
+        if let Some(h) = compile_helperform(opts.clone(), Rc::new(sexp.clone()))? {
+            helpers.push(h.clone());
+        } else {
+            return Err(CompileErr(
+                sexp.loc(),
+                "Namespaces must contain only definitions".to_string(),
+            ));
+        }
+    }
+
+    Ok(HelperForm::Defnamespace(Box::new(NamespaceData {
+        loc: loc.clone(),
+        kw: internal[0].loc(),
+        nl: internal[1].loc(),
+        rendered_name: parsed.as_u8_vec(LongNameTranslation::Namespace),
+        longname: parsed,
+        helpers,
+    })))
+}
+
+pub fn compile_nsref(loc: Srcloc, internal: &[SExp]) -> Result<HelperForm, CompileErr> {
+    if internal.len() < 2 {
+        return Err(CompileErr(
+            loc.clone(),
+            "import must import a module".to_string(),
+        ));
+    }
+
+    let import_spec = ModuleImportSpec::parse(loc.clone(), internal[0].loc(), internal, 1)?;
+    if let ModuleImportSpec::Qualified(q) = &import_spec {
+        return Ok(HelperForm::Defnsref(Box::new(NamespaceRefData {
+            loc,
+            kw: internal[0].loc(),
+            nl: internal[1].loc(),
+            rendered_name: q.name.as_u8_vec(LongNameTranslation::Namespace),
+            longname: q.name.clone(),
+            specification: import_spec.clone(),
+        })));
+    }
+
+    let (_, parsed) = if let SExp::Atom(_nl, name) = &internal[1] {
+        ImportLongName::parse(name)
+    } else {
+        return Err(CompileErr(
+            internal[1].loc(),
+            "Import name must be an atom".to_string(),
+        ));
+    };
+
+    Ok(HelperForm::Defnsref(Box::new(NamespaceRefData {
+        loc,
+        kw: internal[0].loc(),
+        nl: internal[1].loc(),
+        rendered_name: parsed.as_u8_vec(LongNameTranslation::Namespace),
+        longname: parsed,
+        specification: import_spec,
+    })))
 }
 
 pub fn compile_helperform(
@@ -756,6 +841,12 @@ pub fn compile_helperform(
                 },
             )
             .map(Some)
+        } else if matched.op_name == "namespace".as_bytes().to_vec() {
+            let ns = compile_namespace(opts, body.loc(), &matched.orig)?;
+            Ok(Some(ns))
+        } else if matched.op_name == "import".as_bytes().to_vec() {
+            let nsref = compile_nsref(body.loc(), &matched.orig)?;
+            Ok(Some(nsref))
         } else {
             Err(CompileErr(
                 matched.body.loc(),
