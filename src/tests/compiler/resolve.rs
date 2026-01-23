@@ -18,7 +18,7 @@ use crate::compiler::BasicCompileContext;
 #[test]
 fn test_compile_module_with_resolver() {
     let test_program =
-        "(mod (A) (include *standard-cl-24*) (namespace Z (defconst Q 1)) (namespace X (import Z) (defun F (Z) (+ Z Q)) (defun G (Z) (- Z Q))) (import X hiding G) (namespace Y (defun G (Z) (* Z 2))) (import Y exposing (G as GG)) (F (GG A)))";
+        "(mod (A) (include *standard-cl-24*) (namespace Z (defconst Q 1)) (namespace X (import qualified Z as Z1) (defun F (Z) (+ Z Z1.Q)) (defun G (Z) (- Z Z1.Q))) (import X hiding G) (namespace Y (defun G (Z) (* Z 2))) (import Y exposing (G as GG)) (F (GG A)))";
     let opts: Rc<dyn CompilerOpts> = Rc::new(DefaultCompilerOpts::new("*resolve-test*"));
     let loc = Srcloc::start("*resolve-test*");
     let parsed = parse_sexp(loc.clone(), test_program.bytes()).unwrap();
