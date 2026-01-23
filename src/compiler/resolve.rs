@@ -683,7 +683,7 @@ pub fn resolve_namespaces(
                 &renamed_helper,
             )?;
 
-            resolved_helpers.insert(full_name.clone(), result.clone());
+            resolved_helpers.remove(&full_name);
             resolved_helpers.insert(name.clone(), result.clone());
         }
         swap(&mut new_resolved_helpers, &mut round_resolved_helpers);

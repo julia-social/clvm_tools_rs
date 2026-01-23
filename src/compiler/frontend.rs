@@ -634,6 +634,7 @@ fn compile_defmacro(
     })
 }
 
+#[derive(Debug)]
 struct OpName4Match {
     opl: Srcloc,
     op_name: Vec<u8>,
@@ -974,6 +975,10 @@ fn frontend_start(
     }
 }
 
+fn is_namespace_decl(h: &HelperForm) -> bool {
+    matches!(h, HelperForm::Defnamespace(_) | HelperForm::Defnsref(_))
+}
+
 /// Given the available helper list and the main expression, compute the list of
 /// reachable helpers.
 pub fn compute_live_helpers(
@@ -996,7 +1001,7 @@ pub fn compute_live_helpers(
 
     helper_list
         .iter()
-        .filter(|h| !opts.frontend_check_live() || helper_names.contains(h.name()))
+        .filter(|h| !opts.frontend_check_live() || is_namespace_decl(h) || helper_names.contains(h.name()))
         .cloned()
         .collect()
 }
@@ -1054,7 +1059,7 @@ pub fn frontend(
 
     let mut live_helpers = Vec::new();
     for h in our_mod.helpers {
-        if !opts.frontend_check_live() || helper_names.contains(h.name()) {
+        if !opts.frontend_check_live() || is_namespace_decl(&h) || helper_names.contains(h.name()) {
             live_helpers.push(h);
         }
     }
