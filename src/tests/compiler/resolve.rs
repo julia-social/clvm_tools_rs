@@ -6,16 +6,19 @@ use clvmr::Allocator;
 use crate::classic::clvm_tools::stages::stage_0::DefaultProgramRunner;
 use crate::compiler::clvm::run;
 use crate::compiler::codegen::codegen;
-use crate::compiler::compiler::{DefaultCompilerOpts, do_desugar};
+use crate::compiler::compiler::{do_desugar, DefaultCompilerOpts};
 use crate::compiler::comptypes::{CompileErr, CompilerOpts};
 use crate::compiler::frontend::frontend;
 use crate::compiler::optimize::get_optimizer;
 use crate::compiler::resolve::resolve_namespaces;
-use crate::compiler::sexp::{SExp, parse_sexp};
+use crate::compiler::sexp::{parse_sexp, SExp};
 use crate::compiler::srcloc::Srcloc;
 use crate::compiler::BasicCompileContext;
 
-fn compile_program_get_result(test_program: &str, test_input: &str) -> Result<Rc<SExp>, CompileErr> {
+fn compile_program_get_result(
+    test_program: &str,
+    test_input: &str,
+) -> Result<Rc<SExp>, CompileErr> {
     let opts: Rc<dyn CompilerOpts> = Rc::new(DefaultCompilerOpts::new("*resolve-test*"));
     let loc = Srcloc::start("*resolve-test*");
     let parsed = parse_sexp(loc.clone(), test_program.bytes())?;
@@ -37,7 +40,8 @@ fn compile_program_get_result(test_program: &str, test_input: &str) -> Result<Rc
         parse_sexp(loc.clone(), test_input.bytes())?[0].clone(),
         None,
         None,
-    ).map_err(|e| e.into())
+    )
+    .map_err(|e| e.into())
 }
 
 #[test]
