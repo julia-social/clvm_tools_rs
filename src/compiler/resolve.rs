@@ -389,11 +389,6 @@ fn resolve_namespaces_in_expr(
                     }
                 }
 
-                eprintln!(
-                    "could not find helper {} in {}",
-                    decode_string(name),
-                    display_namespace(parent_ns)
-                );
                 return Err(CompileErr(
                     expr.loc(),
                     format!(

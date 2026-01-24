@@ -100,7 +100,7 @@ pub fn create_prim_map() -> Rc<HashMap<Vec<u8>, Rc<SExp>>> {
     Rc::new(prim_map)
 }
 
-fn do_desugar(program: &CompileForm) -> Result<CompileForm, CompileErr> {
+pub fn do_desugar(program: &CompileForm) -> Result<CompileForm, CompileErr> {
     // Transform let bindings, merging nested let scopes with the top namespace
     let hoisted_bindings = hoist_body_let_binding(None, program.args.clone(), program.exp.clone())?;
     let mut new_helpers = hoisted_bindings.0;
