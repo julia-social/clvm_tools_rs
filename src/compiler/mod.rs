@@ -255,6 +255,27 @@ impl<'a> CompileContextWrapper<'a> {
         wrapper
     }
 
+    pub fn from_context(
+        context: &'a mut BasicCompileContext,
+        symbols: &'a mut HashMap<String, String>,
+    ) -> Self {
+        let runner = context.runner();
+        let optimizer = context.optimizer.duplicate();
+        let bcc = BasicCompileContext {
+            allocator: Allocator::new(),
+            runner,
+            symbols: HashMap::new(),
+            optimizer,
+        };
+        let mut wrapper = CompileContextWrapper {
+            allocator: &mut context.allocator,
+            symbols,
+            context: bcc,
+        };
+        wrapper.switch();
+        wrapper
+    }
+
     /// Swap allocator and symbols with the ones in self.context.  This has the
     /// effect of making the inner context hold the same information that would
     /// have been passed down in these members had it come from the caller's

@@ -529,9 +529,9 @@ fn test_preprocess_basic_list() {
             int_fix: false,
         });
     let mut includes = Vec::new();
-    let pp = preprocess(opts.clone(), &mut includes, parsed_forms[0].clone())
+    let pp = preprocess(opts.clone(), &mut includes, &parsed_forms)
         .expect("should preprocess");
-    assert_eq!(pp[pp.len() - 1].to_string(), "(4 1 (4 2 (4 3 ())))");
+    assert_eq!(pp.forms[pp.forms.len() - 1].to_string(), "(4 1 (4 2 (4 3 ())))");
 }
 
 #[test]
@@ -569,7 +569,7 @@ fn test_preprocessor_tours_includes_properly() {
         });
     let parsed = parse_sexp(Srcloc::start(pname), prog.bytes()).expect("should parse");
     let mut includes = Vec::new();
-    let res = preprocess(opts, &mut includes, parsed[0].clone()).expect("should preprocess");
+    let res = preprocess(opts, &mut includes, &parsed).expect("should preprocess");
     let expected_lines = &[
         "(defmac __chia__primitive__if (A B C) (qq (a (i (unquote A) (com (unquote B)) (com (unquote C))) @)))",
         "(defun __chia__if (ARGS) (a (i (r (r (r ARGS))) (com (qq (a (i (unquote (f ARGS)) (com (unquote (f (r ARGS)))) (com (unquote (__chia__if (r (r ARGS)))))) @))) (com (qq (a (i (unquote (f ARGS)) (com (unquote (f (r ARGS)))) (com (unquote (f (r (r ARGS)))))) @)))) @))",
@@ -605,8 +605,8 @@ fn test_preprocessor_tours_includes_properly() {
         "(defun puzzle-hash-of-curried-function (function-hash . reversed-curry-parameter-hashes) (tree-hash-of-apply function-hash (build-curry-list reversed-curry-parameter-hashes (sha256 ONE ONE))))",
         "()",
     ];
-    for (i, r) in res.iter().enumerate() {
+    for (i, r) in res.forms.iter().enumerate() {
         assert_eq!(r.to_string(), expected_lines[i]);
     }
-    assert_eq!(res.len(), expected_lines.len());
+    assert_eq!(res.forms.len(), expected_lines.len());
 }

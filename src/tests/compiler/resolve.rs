@@ -23,7 +23,7 @@ fn compile_program_get_result(
     let loc = Srcloc::start("*resolve-test*");
     let parsed = parse_sexp(loc.clone(), test_program.bytes())?;
     let processed = frontend(opts.clone(), &parsed)?;
-    let resolved = resolve_namespaces(opts.clone(), &processed)?;
+    let resolved = resolve_namespaces(opts.clone(), &processed.compileform())?;
     let desugared = do_desugar(&resolved)?;
     let mut context = BasicCompileContext {
         allocator: Allocator::new(),

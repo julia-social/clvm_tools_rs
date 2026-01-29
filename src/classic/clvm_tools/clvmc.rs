@@ -118,7 +118,7 @@ pub fn compile_clvm_text_maybe_opt(
             runner,
             opts,
             do_optimize,
-            &unopt_res,
+            &unopt_res.to_sexp(),
         )?;
 
         Ok(convert_to_clvm_rs(allocator, res)?)

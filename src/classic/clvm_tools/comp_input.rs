@@ -215,7 +215,7 @@ impl RunAndCompileInputData {
                 runner,
                 self.opts.clone(),
                 self.do_optimize,
-                &x,
+                &x.to_sexp(),
             )
         })?;
 
