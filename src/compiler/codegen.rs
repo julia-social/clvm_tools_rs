@@ -1560,15 +1560,6 @@ fn start_codegen(
                         ));
                     }
                 },
-                ConstantKind::Module(mtype) => generate_module_constant_body(
-                    context,
-                    code_generator,
-                    opts.clone(),
-                    program.clone(),
-                    mtype,
-                    h,
-                    defc,
-                )?,
             },
             HelperForm::Defmacro(mac) => {
                 let macro_program = Rc::new(SExp::Cons(

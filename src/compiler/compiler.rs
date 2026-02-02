@@ -1,6 +1,6 @@
 use num_bigint::ToBigInt;
 use std::borrow::Borrow;
-use std::collections::{HashMap, HashSet, BTreeMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -108,6 +108,16 @@ pub fn create_prim_map() -> Rc<HashMap<Vec<u8>, Rc<SExp>>> {
     Rc::new(prim_map)
 }
 
+pub fn desugar_frontend(
+    context: &mut BasicCompileContext,
+    opts: Rc<dyn CompilerOpts>,
+    p0: CompileForm,
+) -> Result<CompileForm, CompileErr> {
+    let p1 = context.frontend_optimization(opts.clone(), p0)?;
+
+    do_desugar(&p1)
+}
+
 pub fn do_desugar(program: &CompileForm) -> Result<CompileForm, CompileErr> {
     // Transform let bindings, merging nested let scopes with the top namespace
     let hoisted_bindings = hoist_body_let_binding(None, program.args.clone(), program.exp.clone())?;
@@ -126,19 +136,7 @@ pub fn do_desugar(program: &CompileForm) -> Result<CompileForm, CompileErr> {
     })
 }
 
-pub fn desugar_pre_forms(
-    context: &mut BasicCompileContext,
-    opts: Rc<dyn CompilerOpts>,
-    pre_forms: &[Rc<SExp>],
-) -> Result<CompileForm, CompileErr> {
-    let p0 = frontend(opts.clone(), pre_forms)?;
-
-    let p1 = context.frontend_optimization(opts.clone(), p0.compileform().clone())?;
-
-    do_desugar(&p1)
-}
-
-pub fn compile_from_compileform(
+pub fn finish_compilation(
     context: &mut BasicCompileContext,
     opts: Rc<dyn CompilerOpts>,
     p2: CompileForm,
@@ -151,6 +149,19 @@ pub fn compile_from_compileform(
     let g2 = context.post_codegen_output_optimize(opts, generated)?;
 
     Ok(g2)
+}
+
+pub fn compile_from_compileform(
+    context: &mut BasicCompileContext,
+    opts: Rc<dyn CompilerOpts>,
+    p0: CompileForm,
+) -> Result<SExp, CompileErr> {
+    let p1 = context.frontend_optimization(opts.clone(), p0)?;
+
+    // Resolve includes, convert program source to lexemes
+    let p2 = do_desugar(&p1)?;
+
+    finish_compilation(context, opts, p2)
 }
 
 fn create_hex_output_path(loc: Srcloc, file_path: &str, func: &str) -> Result<String, CompileErr> {
@@ -354,7 +365,6 @@ pub fn compile_module(
             program.exp = desc.expr.clone();
 
             program = resolve_namespaces(opts.clone(), &program)?;
-            modernize_constants(&mut program.helpers, standalone_constants);
 
             let output = Rc::new(compile_from_compileform(
                 context,
@@ -404,7 +414,6 @@ pub fn compile_module(
         opts.clone(),
         &form_module_program_common_body(standalone_constants, program.clone(), exports)?,
     )?;
-    modernize_constants(&mut common_program.helpers, standalone_constants);
     eprintln!("common program {}", common_program.to_sexp());
     let common_output = compile_from_compileform(context, opts.clone(), common_program.clone())?;
     eprintln!("common_output {}", common_output);
@@ -504,10 +513,6 @@ pub fn compile_module(
         // remove_standalone_constant(&mut second_stage_program, &fun_name);
         let mut constant_culled_second_stage_program =
             resolve_namespaces(opts.clone(), &second_stage_program)?;
-        modernize_constants(
-            &mut constant_culled_second_stage_program.helpers,
-            standalone_constants,
-        );
         eprintln!(
             "standalone program for {}: {}",
             decode_string(&fun_name),
@@ -702,23 +707,6 @@ fn form_hash_expression(inner_exp: Rc<BodyForm>) -> Rc<BodyForm> {
         None,
     ))
 
-}
-fn modernize_constants(helpers: &mut [HelperForm], standalone_constants: &HashSet<Vec<u8>>) {
-    for h in helpers.iter_mut() {
-        match h {
-            HelperForm::Defconstant(d) => {
-                // Ensure that we upgrade the constant type.
-                d.tabled = false;
-                if standalone_constants.contains(&d.name) {
-                    d.kind = ConstantKind::Module(false);
-                }
-            }
-            HelperForm::Defnamespace(ns) => {
-                modernize_constants(&mut ns.helpers, standalone_constants);
-            }
-            _ => {}
-        }
-    }
 }
 
 fn capture_standalone_constants(

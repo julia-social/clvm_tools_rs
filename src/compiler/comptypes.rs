@@ -281,9 +281,6 @@ pub struct DefconstData {
 pub enum ConstantKind {
     Complex,
     Simple,
-    /// Module toplevel constants have extra guarantees which need a different
-    /// resolution style.
-    Module(bool),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
