@@ -740,7 +740,7 @@ fn test_helperform_import_qualified_0() {
                 loc: srcloc.clone(),
                 nl: srcloc.clone(),
                 kw: srcloc.clone(),
-                name: name,
+                name,
                 target: None,
             }))
         }))
@@ -767,7 +767,7 @@ fn test_helperform_import_qualified_1() {
                 loc: srcloc.clone(),
                 nl: srcloc.clone(),
                 kw: srcloc.clone(),
-                name: name,
+                name,
                 target: Some(QualifiedModuleInfoTarget {
                     kw: srcloc.clone(),
                     nl: srcloc.clone(),

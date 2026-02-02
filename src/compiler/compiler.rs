@@ -18,8 +18,8 @@ use crate::compiler::clvm::{convert_to_clvm_rs, run, sha256tree, NewStyleIntConv
 use crate::compiler::codegen::{codegen, hoist_body_let_binding, process_helper_let_bindings};
 use crate::compiler::comptypes::{
     BodyForm, CompileErr, CompileForm, CompileModuleComponent, CompileModuleOutput, CompilerOpts,
-    CompilerOutput, ConstantKind, DefunData, Export, FrontendOutput, HelperForm, ImportLongName,
-    PrimaryCodegen, SyntheticType,
+    CompilerOutput, DefunData, Export, FrontendOutput, HelperForm, ImportLongName, PrimaryCodegen,
+    SyntheticType,
 };
 use crate::compiler::dialect::{AcceptedDialect, KNOWN_DIALECTS};
 use crate::compiler::frontend::frontend;
@@ -414,7 +414,7 @@ pub fn compile_module(
 
     // First pass compilation: remove standalone constant helpers and produce
     // a body which contains all the non-standalone exports.
-    let mut common_program = resolve_namespaces(
+    let common_program = resolve_namespaces(
         opts.clone(),
         &form_module_program_common_body(standalone_constants, program.clone(), exports)?,
     )?;
@@ -425,19 +425,20 @@ pub fn compile_module(
     let mut captured_export_map: BTreeMap<Vec<u8>, Rc<SExp>> = BTreeMap::new();
     // Capture exports that are members of the common set.
     // We get a triple of output: (env_shape env code)
-    let (env_shape, env, code) = (|| {
+    let code = (|| {
         if let Some(lst) = common_output.proper_list() {
             if lst.len() == 3 {
-                return (
-                    Rc::new(lst[0].clone()),
-                    Rc::new(lst[1].clone()),
-                    Rc::new(lst[2].clone()),
-                );
+                // For now, just return the code.
+                // In the full version of modules, we add extras here.
+                return Ok(Rc::new(lst[2].clone()));
             }
         }
 
-        todo!();
-    })();
+        Err(CompileErr(
+            common_program.loc(),
+            "Malformed export map from module style program.".to_string(),
+        ))
+    })()?;
 
     populate_export_map(context, &mut captured_export_map, opts.clone(), code)?;
 
@@ -515,7 +516,7 @@ pub fn compile_module(
             second_stage_program.to_sexp()
         );
         // remove_standalone_constant(&mut second_stage_program, &fun_name);
-        let mut constant_culled_second_stage_program =
+        let constant_culled_second_stage_program =
             resolve_namespaces(opts.clone(), &second_stage_program)?;
         eprintln!(
             "standalone program for {}: {}",
