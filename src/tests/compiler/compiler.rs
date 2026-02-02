@@ -27,7 +27,8 @@ fn compile_string(content: &String) -> Result<String, CompileErr> {
     let runner = Rc::new(DefaultProgramRunner::new());
     let opts = Rc::new(DefaultCompilerOpts::new(&"*test*".to_string()));
 
-    compile_file(&mut allocator, runner, opts, &content, &mut HashMap::new()).map(|x| x.to_sexp().to_string())
+    compile_file(&mut allocator, runner, opts, &content, &mut HashMap::new())
+        .map(|x| x.to_sexp().to_string())
 }
 
 fn run_string_maybe_opt(
@@ -2385,7 +2386,10 @@ fn test_rename_in_compileform_simple() {
     let desired_outcome = "(defun F overridden_$_A (let ((overridden_$_B (* 3 (f overridden_$_A))) (y_$_C (f (r overridden_$_A))) (z_$_D (f (r (r overridden_$_A))))) (+ overridden_$_B z_$_D y_$_C)))";
     let parsed = parse_sexp(Srcloc::start("*test*"), prog.bytes()).expect("should parse");
     let opts: Rc<dyn CompilerOpts> = Rc::new(DefaultCompilerOpts::new(&"*test*".to_string()));
-    let compiled = frontend(opts, &parsed).expect("should compile").compileform().clone();
+    let compiled = frontend(opts, &parsed)
+        .expect("should compile")
+        .compileform()
+        .clone();
     let helper_f: Vec<_> = compiled
         .helpers
         .iter()

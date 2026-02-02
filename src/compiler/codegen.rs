@@ -12,9 +12,9 @@ use crate::compiler::clvm::{run, truthy};
 use crate::compiler::compiler::{compile_from_compileform, is_at_capture};
 use crate::compiler::comptypes::{
     fold_m, join_vecs_to_string, list_to_cons, Binding, BindingPattern, BodyForm, CallSpec,
-    Callable, CompileErr, CompileForm, CompiledCode, CompilerOpts, ConstantKind, DefconstData, DefunCall,
-    DefunData, HelperForm, InlineFunction, LetData, LetFormInlineHint, LetFormKind, PrimaryCodegen,
-    RawCallSpec, SyntheticType,
+    Callable, CompileErr, CompileForm, CompiledCode, CompilerOpts, ConstantKind, DefconstData,
+    DefunCall, DefunData, HelperForm, InlineFunction, LetData, LetFormInlineHint, LetFormKind,
+    PrimaryCodegen, RawCallSpec, SyntheticType,
 };
 use crate::compiler::debug::{build_swap_table_mut, relabel};
 use crate::compiler::evaluate::{Evaluator, EVAL_STACK_LIMIT};
@@ -887,7 +887,11 @@ fn codegen_(
                 updated_opts
                     .compile_program(context, Rc::new(tocompile))
                     .and_then(|code| {
-                        context.post_codegen_function_optimize(opts.clone(), Some(h), Rc::new(code.to_sexp()))
+                        context.post_codegen_function_optimize(
+                            opts.clone(),
+                            Some(h),
+                            Rc::new(code.to_sexp()),
+                        )
                     })
                     .and_then(|code| {
                         fail_if_present(defun.loc.clone(), &compiler.inlines, &defun.name, code)
@@ -1375,11 +1379,7 @@ fn generate_complex_constant_body(
         decode_string(&defc.name),
         defc.body.to_sexp()
     );
-    let evaluator = Evaluator::new(
-        opts.clone(),
-        context.runner(),
-        program.helpers.clone(),
-    );
+    let evaluator = Evaluator::new(opts.clone(), context.runner(), program.helpers.clone());
     let constant_result = evaluator.shrink_bodyform(
         context,
         Rc::new(SExp::Nil(defc.loc.clone())),
@@ -1458,15 +1458,15 @@ fn generate_module_constant_body(
         None,
         Some(CONST_EVAL_LIMIT),
     )
-        .map_err(|r| CompileErr(defc.loc.clone(), format!("Error evaluating constant: {r}")))
-        .map(|res| {
-            if defc.tabled {
-                Ok(code_generator.add_tabled_constant(&defc.name, res))
-            } else {
-                let quoted = primquote(defc.loc.clone(), res);
-                Ok(code_generator.add_constant(&defc.name, Rc::new(quoted)))
-            }
-        })?
+    .map_err(|r| CompileErr(defc.loc.clone(), format!("Error evaluating constant: {r}")))
+    .map(|res| {
+        if defc.tabled {
+            Ok(code_generator.add_tabled_constant(&defc.name, res))
+        } else {
+            let quoted = primquote(defc.loc.clone(), res);
+            Ok(code_generator.add_constant(&defc.name, Rc::new(quoted)))
+        }
+    })?
 }
 
 fn start_codegen(
@@ -1559,7 +1559,7 @@ fn start_codegen(
                             ),
                         ));
                     }
-                },
+                }
             },
             HelperForm::Defmacro(mac) => {
                 let macro_program = Rc::new(SExp::Cons(

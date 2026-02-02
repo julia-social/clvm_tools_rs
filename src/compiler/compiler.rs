@@ -16,11 +16,15 @@ use crate::classic::clvm::sexp::sexp_as_bin;
 use crate::compiler::cldb::hex_to_modern_sexp;
 use crate::compiler::clvm::{convert_to_clvm_rs, run, sha256tree, NewStyleIntConversion};
 use crate::compiler::codegen::{codegen, hoist_body_let_binding, process_helper_let_bindings};
-use crate::compiler::comptypes::{BodyForm, CompileErr, CompileForm, CompileModuleComponent, CompileModuleOutput, CompilerOpts, CompilerOutput, ConstantKind, DefunData, Export, FrontendOutput, HelperForm, ImportLongName, PrimaryCodegen, SyntheticType};
+use crate::compiler::comptypes::{
+    BodyForm, CompileErr, CompileForm, CompileModuleComponent, CompileModuleOutput, CompilerOpts,
+    CompilerOutput, ConstantKind, DefunData, Export, FrontendOutput, HelperForm, ImportLongName,
+    PrimaryCodegen, SyntheticType,
+};
 use crate::compiler::dialect::{AcceptedDialect, KNOWN_DIALECTS};
 use crate::compiler::frontend::frontend;
-use crate::compiler::optimize::get_optimizer;
 use crate::compiler::optimize::depgraph::{DepgraphOptions, FunctionDependencyGraph};
+use crate::compiler::optimize::get_optimizer;
 use crate::compiler::prims;
 use crate::compiler::resolve::{find_helper_target, resolve_namespaces};
 use crate::compiler::sexp::{decode_string, parse_sexp, SExp};
@@ -706,7 +710,6 @@ fn form_hash_expression(inner_exp: Rc<BodyForm>) -> Rc<BodyForm> {
         ],
         None,
     ))
-
 }
 
 fn capture_standalone_constants(

@@ -936,11 +936,8 @@ impl Preprocessor {
 
         let new_program = resolve_namespaces(self.opts.clone(), &starting_program)?;
 
-        let compiled_program = compile_from_compileform(
-            &mut wrapper.context,
-            self.opts.clone(),
-            new_program,
-        )?;
+        let compiled_program =
+            compile_from_compileform(&mut wrapper.context, self.opts.clone(), new_program)?;
         self.stored_macros.insert(
             found_name.clone(),
             StoredMacro::Compiled(Rc::new(compiled_program.clone())),

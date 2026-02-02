@@ -1416,7 +1416,7 @@ impl HelperForm {
                         defc.body.to_sexp(),
                     ],
                 ))
-            },
+            }
             HelperForm::Defmacro(mac) => generate_defmacro_sexp(mac),
             HelperForm::Defun(inline, defun) => {
                 let di_string = "defun-inline".to_string();
