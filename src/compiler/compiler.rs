@@ -425,20 +425,7 @@ pub fn compile_module(
     let mut captured_export_map: BTreeMap<Vec<u8>, Rc<SExp>> = BTreeMap::new();
     // Capture exports that are members of the common set.
     // We get a triple of output: (env_shape env code)
-    let code = (|| {
-        if let Some(lst) = common_output.proper_list() {
-            if lst.len() == 3 {
-                // For now, just return the code.
-                // In the full version of modules, we add extras here.
-                return Ok(Rc::new(lst[2].clone()));
-            }
-        }
-
-        Err(CompileErr(
-            common_program.loc(),
-            "Malformed export map from module style program.".to_string(),
-        ))
-    })()?;
+    let code = Rc::new(common_output.clone());
 
     populate_export_map(context, &mut captured_export_map, opts.clone(), code)?;
 
