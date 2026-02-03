@@ -100,13 +100,7 @@ pub fn perform_compile_of_file(
     let source_opts = TestModuleCompilerOpts::new(orig_opts);
     let opts: Rc<dyn CompilerOpts> = Rc::new(source_opts.clone());
     let mut symbol_table = HashMap::new();
-    let compiled = compile_file(
-        allocator,
-        runner.clone(),
-        opts,
-        &content,
-        &mut symbol_table,
-    )?;
+    let compiled = compile_file(allocator, runner.clone(), opts, &content, &mut symbol_table)?;
     Ok(PerformCompileResult {
         compiled,
         source_opts,
