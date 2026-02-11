@@ -231,14 +231,9 @@ fn determine_hex_file_names(
 }
 
 fn form_module_program_common_body(
-    standalone_constants: &HashSet<Vec<u8>>,
     mut program: CompileForm,
     exports: &[Export],
 ) -> Result<CompileForm, CompileErr> {
-    program
-        .helpers
-        .retain(|h| !standalone_constants.contains(h.name()));
-
     // The body should contain anything that is in the exports but not standalone
     // constants.
     let mut body = Rc::new(BodyForm::Value(SExp::Nil(program.loc())));
@@ -279,9 +274,7 @@ fn form_module_program_common_body(
     for (target_name, capture) in exports.iter().filter_map(|e| {
         if let Export::Function(exdef) = e {
             let target_name = exdef.as_name.as_ref().unwrap_or(&exdef.name).value.clone();
-            if !standalone_constants.contains(&exdef.name.value) {
-                return Some((target_name, exdef.name.value.clone()));
-            }
+            return Some((target_name, exdef.name.value.clone()));
         }
 
         None
@@ -310,20 +303,16 @@ fn populate_export_map(
         None,
         None,
     )?;
-    eprintln!("populate_export_map: list {result}");
 
     while let SExp::Cons(_, first, rest) = result.borrow() {
-        eprintln!("{first} . {rest}");
         if let SExp::Cons(_, name, value) = first.borrow() {
             if let SExp::Atom(_, name) = name.atomize().borrow() {
                 let mut hash_name: Vec<u8> = name.clone();
                 hash_name.append(&mut b"_hash".to_vec());
-                eprintln!("{}", decode_string(&hash_name));
                 export_map.insert(
                     hash_name,
                     Rc::new(SExp::Atom(value.loc(), sha256tree(value.clone()))),
                 );
-                eprintln!("{} = {value}", decode_string(name));
                 export_map.insert(name.clone(), value.clone());
             }
         }
@@ -346,7 +335,6 @@ fn populate_export_map(
 pub fn compile_module(
     context: &mut BasicCompileContext,
     mut opts: Rc<dyn CompilerOpts>,
-    standalone_constants: &HashSet<Vec<u8>>,
     mut program: CompileForm,
     exports: &[Export],
 ) -> Result<CompileModuleOutput, CompileErr> {
@@ -400,40 +388,24 @@ pub fn compile_module(
     let hash_loc = program.loc();
     for e in exports.iter() {
         if let Export::Function(exdef) = &e {
-            if !standalone_constants.contains(&exdef.name.value) {
-                eprintln!(
-                    "add inline hash function for export {}",
-                    decode_string(&exdef.name.value)
-                );
-                add_inline_hash_for_constant(&mut program, &hash_loc, &exdef.name.value);
-            }
+            add_inline_hash_for_constant(&mut program, &hash_loc, &exdef.name.value);
         }
     }
-
-    eprintln!("program with hashes {}", program.to_sexp());
 
     // First pass compilation: remove standalone constant helpers and produce
     // a body which contains all the non-standalone exports.
     let common_program = resolve_namespaces(
         opts.clone(),
-        &form_module_program_common_body(standalone_constants, program.clone(), exports)?,
+        &form_module_program_common_body(program.clone(), exports)?,
     )?;
-    eprintln!("common program {}", common_program.to_sexp());
-    let common_output = compile_from_compileform(context, opts.clone(), common_program.clone())?;
-    eprintln!("common_output {}", common_output);
 
+    let common_output = compile_from_compileform(context, opts.clone(), common_program.clone())?;
     let mut captured_export_map: BTreeMap<Vec<u8>, Rc<SExp>> = BTreeMap::new();
     // Capture exports that are members of the common set.
     // We get a triple of output: (env_shape env code)
     let code = Rc::new(common_output.clone());
 
     populate_export_map(context, &mut captured_export_map, opts.clone(), code)?;
-
-    let keys_strings: Vec<String> = captured_export_map
-        .keys()
-        .map(|k| decode_string(k))
-        .collect();
-    eprintln!("have common export keys {keys_strings:?}");
 
     // Second pass compilation: for each export in standalone constants
     let cons = Rc::new(BodyForm::Value(SExp::Integer(
@@ -460,7 +432,6 @@ pub fn compile_module(
             ));
         };
 
-        eprintln!("process export {}", decode_string(&export_name));
         let second_stage_program = if let Some(h) =
             find_exported_helper(opts.clone(), &program, &fun_name)?
         {
@@ -498,25 +469,14 @@ pub fn compile_module(
             ));
         };
 
-        eprintln!(
-            "resolve namespaces in program {}",
-            second_stage_program.to_sexp()
-        );
         // remove_standalone_constant(&mut second_stage_program, &fun_name);
         let constant_culled_second_stage_program =
             resolve_namespaces(opts.clone(), &second_stage_program)?;
-        eprintln!(
-            "standalone program for {}: {}",
-            decode_string(&fun_name),
-            constant_culled_second_stage_program.to_sexp()
-        );
-
         let compiled_result = Rc::new(compile_from_compileform(
             context,
             opts.clone(),
             constant_culled_second_stage_program,
         )?);
-        eprintln!("compiled_result {compiled_result}");
 
         populate_export_map(
             context,
@@ -701,7 +661,6 @@ fn form_hash_expression(inner_exp: Rc<BodyForm>) -> Rc<BodyForm> {
 }
 
 fn capture_standalone_constants(
-    standalone_constants: &mut HashSet<Vec<u8>>,
     depgraph: &FunctionDependencyGraph,
     helpers: &[HelperForm],
     exports: &[Export],
@@ -709,7 +668,7 @@ fn capture_standalone_constants(
     // Find constants on which nothing depends (they're only output).
     for h in helpers.iter() {
         if let HelperForm::Defnamespace(ns) = h {
-            capture_standalone_constants(standalone_constants, depgraph, &ns.helpers, exports)
+            capture_standalone_constants(depgraph, &ns.helpers, exports)
         } else if matches!(h, HelperForm::Defconstant(_) | HelperForm::Defun(_, _)) {
             let match_exports = exports.iter().any(|e| match e {
                 Export::MainProgram(_) => false,
@@ -723,12 +682,6 @@ fn capture_standalone_constants(
 
             let mut constant_is_depended = HashSet::new();
             depgraph.get_full_depended_on_by(&mut constant_is_depended, h.name());
-            if constant_is_depended.is_empty() {
-                eprintln!("[X] standalone {}", decode_string(h.name()));
-                standalone_constants.insert(h.name().to_vec());
-            } else {
-                eprintln!("[ ] standalone {}", decode_string(h.name()));
-            }
         }
     }
 }
@@ -800,19 +753,9 @@ pub fn compile_pre_forms(
                 },
             );
 
-            let mut standalone_constants = HashSet::new();
-            capture_standalone_constants(
-                &mut standalone_constants,
-                &depgraph,
-                &cf.helpers,
-                &exports,
-            );
+            capture_standalone_constants(&depgraph, &cf.helpers, &exports);
             Ok(CompilerOutput::Module(compile_module(
-                context,
-                opts,
-                &standalone_constants,
-                cf,
-                &exports,
+                context, opts, cf, &exports,
             )?))
         }
     }
