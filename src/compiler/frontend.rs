@@ -873,12 +873,6 @@ pub fn compile_helperform(
                 new_helpers: vec![definition],
             }))
         } else if matched.op_name == b"defmacro" || is_defmac {
-            if is_defmac {
-                return Ok(Some(HelperFormResult {
-                    new_helpers: vec![],
-                }));
-            }
-
             let definition = compile_defmacro(
                 opts,
                 l,

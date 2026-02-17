@@ -362,7 +362,7 @@ pub fn get_callable(
                 _ => Err(CompileErr(
                     l.clone(),
                     format!("no such callable '{}'", decode_string(name)),
-                )),
+                ))
             }
         }
         SExp::Integer(_, v) => Ok(Callable::CallPrim(l.clone(), SExp::Integer(l, v.clone()))),
