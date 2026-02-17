@@ -613,9 +613,10 @@ fn test_cache_reuses_cache_data() {
             hexfile: hex_file,
             argument: "(3)",
             outcome: Run("20400"),
-        }]
-    ).unwrap();
-    let new_content = indoc!{"
+        }],
+    )
+    .unwrap();
+    let new_content = indoc! {"
 (include *standard-cl-23*)
 
 (import programs.p1s exposing (program as P1S))
@@ -635,6 +636,6 @@ fn test_cache_reuses_cache_data() {
             hexfile: hex_file,
             argument: "(3)",
             outcome: Run("10200"),
-        }]
+        }],
     );
 }
