@@ -558,32 +558,6 @@ fn test_program_exporting_constant_from_program() {
     );
 }
 
-/*
-#[test]
-fn test_program_export_constant_and_function() {
-    let filename = "resources/tests/module/test-export-constant-and-function.clsp";
-    let content = fs::read_to_string(filename).expect("file should exist");
-    let d_hex_filename = "resources/tests/module/test-export-constant-and-function_D.hex";
-    let f_hex_filename = "resources/tests/module/test-export-constant-and-function_F.hex";
-    test_compile_and_run_program_with_modules(
-        filename,
-        &content,
-        &[
-            HexArgumentOutcome {
-                hexfile: d_hex_filename,
-                argument: "(19191 (a (q 16 (q . 19191) 5) (c (q (+ (q . 19191) 5)) 1)) 0x3e6c399d8b10babad835468467a4b837036357ddfb8c320ba39a914c63152967 0xda99392a41a05d70cc42102af36ba888e964e57b587016e14e5e3faf66807dff)",
-                outcome: ContentEquals,
-            },
-            HexArgumentOutcome {
-                hexfile: f_hex_filename,
-                argument: "(a (q 16 (q . 19191) 5) (c (q (+ (q . 19191) 5)) 1))",
-                outcome: ContentEquals,
-            },
-        ]
-    );
-}
-*/
-
 #[test]
 fn test_detect_illegal_constant_arrangement() {
     let filename = "resources/tests/module/illegal-constant-arrangement-1.clsp";
@@ -620,5 +594,47 @@ fn test_constant_single_round() {
             argument: "31",
             outcome: ContentEquals,
         }],
+    );
+}
+
+#[test]
+fn test_cache_reuses_cache_data() {
+    let filename = "resources/tests/module/p1s_host.clsp";
+    let content = fs::read_to_string(filename).expect("file should exist");
+    let hex_file = "resources/tests/module/p1s_host.hex";
+    let orig_opts: Rc<dyn CompilerOpts> = Rc::new(DefaultCompilerOpts::new(filename))
+        .set_search_paths(&["resources/tests/module".to_string()]);
+    let source_opts = TestModuleCompilerOpts::new(orig_opts);
+    let source_opts = test_compile_and_run_program_with_modules_and_fs(
+        source_opts,
+        filename,
+        &content,
+        &[HexArgumentOutcome {
+            hexfile: hex_file,
+            argument: "(3)",
+            outcome: Run("20400"),
+        }]
+    ).unwrap();
+    let new_content = indoc!{"
+(include *standard-cl-23*)
+
+(import programs.p1s exposing (program as P1S))
+(import programs.p1t exposing (program as P1T))
+
+(export (X) (+ (a P1S (list X)) (a P1T (list X))))
+"};
+    // We've set p1t to () and changed the main program so it will also recompile.  If the cache
+    // is used to retrieve p1t.clsp (since the source file is the same as during the previous
+    // compilation), then (a P1T (list X)) will yield 0.
+    source_opts.set_file_content(".chialisp/1bebfef994a8f4aeca386e7ad3b710b1cf861e5fb3b47cd6906c63b507d457a2/resources/tests/module/programs/p1t.hex".to_string(), b"80".to_vec());
+    test_compile_and_run_program_with_modules_and_fs(
+        source_opts,
+        filename,
+        new_content,
+        &[HexArgumentOutcome {
+            hexfile: hex_file,
+            argument: "(3)",
+            outcome: Run("10200"),
+        }]
     );
 }
