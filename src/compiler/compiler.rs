@@ -19,8 +19,9 @@ use crate::compiler::clvm::{convert_to_clvm_rs, run, sha256tree, NewStyleIntConv
 use crate::compiler::codegen::{codegen, hoist_body_let_binding, process_helper_let_bindings};
 use crate::compiler::comptypes::{
     BodyForm, CompileErr, CompileForm, CompileModuleComponent, CompileModuleOutput, CompilerOpts,
-    CompilerOutput, ConstantKind, DefunData, Export, FrontendOutput, HelperForm, ImportLongName, IncludeDesc,
-    IncludeProcessType, ModulePhase, PrimaryCodegen, StandalonePhaseInfo, SyntheticType,
+    CompilerOutput, ConstantKind, DefunData, Export, FrontendOutput, HelperForm, ImportLongName,
+    IncludeDesc, IncludeProcessType, ModulePhase, PrimaryCodegen, StandalonePhaseInfo,
+    SyntheticType,
 };
 use crate::compiler::dialect::{AcceptedDialect, KNOWN_DIALECTS};
 use crate::compiler::diskcache::{set_cache_element, try_element_from_cache};
