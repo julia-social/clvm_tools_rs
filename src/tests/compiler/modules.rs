@@ -47,6 +47,18 @@ impl TestModuleCompilerOpts {
         let files: &HashMap<String, Vec<u8>> = &files_ref.borrow();
         files.get(name).map(|f| f.to_vec())
     }
+
+    pub fn set_file_content<'a>(&'a self, name: String, content: Vec<u8>) {
+        let wf_refcell: &RefCell<HashMap<String, Vec<u8>>> = self.written_files.borrow();
+        let wf_ref: &mut HashMap<String, Vec<u8>> = &mut wf_refcell.borrow_mut();
+        wf_ref.insert(name, content);
+    }
+
+    pub fn erase_written<'a>(&'a self, name: &str) {
+        let wf_refcell: &RefCell<HashMap<String, Vec<u8>>> = self.written_files.borrow();
+        let wf_ref: &mut HashMap<String, Vec<u8>> = &mut wf_refcell.borrow_mut();
+        wf_ref.remove(name);
+    }
 }
 
 impl HasCompilerOptsDelegation for TestModuleCompilerOpts {
@@ -63,6 +75,20 @@ impl HasCompilerOptsDelegation for TestModuleCompilerOpts {
             written_files: self.written_files.clone(),
             opts: new_opts,
         })
+    }
+
+    fn override_read_new_file(
+        &self,
+        inc_from: String,
+        filename: String,
+    ) -> Result<(String, Vec<u8>), CompileErr> {
+        eprintln!("filename {filename}");
+        let rfcell: &RefCell<HashMap<String, Vec<u8>>> = self.written_files.borrow();
+        let rf: &HashMap<String, Vec<u8>> = &rfcell.borrow();
+        if let Some(content) = rf.get(&filename) {
+            return Ok((filename, content.clone()));
+        }
+        self.opts.read_new_file(inc_from, filename)
     }
 
     fn override_write_new_file(&self, target: &str, content: &[u8]) -> Result<(), CompileErr> {
@@ -86,6 +112,7 @@ pub struct PerformCompileResult {
 pub fn perform_compile_of_file(
     allocator: &mut Allocator,
     runner: Rc<dyn TRunProgram>,
+    source_opts: TestModuleCompilerOpts,
     filename: &str,
     content: &str,
 ) -> Result<PerformCompileResult, CompileErr> {
@@ -94,11 +121,7 @@ pub fn perform_compile_of_file(
     let listed = Rc::new(enlist(loc.clone(), &parsed));
     let nodeptr = convert_to_clvm_rs(allocator, listed.clone()).expect("should convert");
     let dialect = detect_modern(allocator, nodeptr);
-    let orig_opts: Rc<dyn CompilerOpts> = Rc::new(DefaultCompilerOpts::new(filename))
-        .set_dialect(dialect)
-        .set_search_paths(&["resources/tests/module".to_string()]);
-    let source_opts = TestModuleCompilerOpts::new(orig_opts);
-    let opts: Rc<dyn CompilerOpts> = Rc::new(source_opts.clone());
+    let opts: Rc<dyn CompilerOpts> = Rc::new(source_opts.clone()).set_dialect(dialect);
     let mut symbol_table = HashMap::new();
     let compiled = compile_file(allocator, runner.clone(), opts, &content, &mut symbol_table)?;
     Ok(PerformCompileResult {
@@ -123,18 +146,25 @@ pub fn hex_to_clvm(allocator: &mut Allocator, hex_data: &[u8]) -> clvmr::allocat
     .1
 }
 
-fn test_compile_and_run_program_with_modules(
+fn test_compile_and_run_program_with_modules_and_fs(
+    source_opts: TestModuleCompilerOpts,
     filename: &str,
     content: &str,
     runs: &[HexArgumentOutcome],
-) {
+) -> Option<TestModuleCompilerOpts> {
     let mut allocator = Allocator::new();
     let runner = Rc::new(DefaultProgramRunner::new());
-    let compile_result = perform_compile_of_file(&mut allocator, runner.clone(), filename, content);
+    let compile_result = perform_compile_of_file(
+        &mut allocator,
+        runner.clone(),
+        source_opts,
+        filename,
+        content,
+    );
 
     let compile_result = if runs.is_empty() {
         assert!(compile_result.is_err());
-        return;
+        return None;
     } else {
         compile_result.expect("Was expected to compile")
     };
@@ -164,6 +194,19 @@ fn test_compile_and_run_program_with_modules(
             assert!(run_result.is_err());
         }
     }
+
+    Some(compile_result.source_opts)
+}
+
+fn test_compile_and_run_program_with_modules(
+    filename: &str,
+    content: &str,
+    runs: &[HexArgumentOutcome],
+) -> Option<TestModuleCompilerOpts> {
+    let orig_opts: Rc<dyn CompilerOpts> = Rc::new(DefaultCompilerOpts::new(filename))
+        .set_search_paths(&["resources/tests/module".to_string()]);
+    let source_opts = TestModuleCompilerOpts::new(orig_opts);
+    test_compile_and_run_program_with_modules_and_fs(source_opts, filename, content, runs)
 }
 
 #[test]

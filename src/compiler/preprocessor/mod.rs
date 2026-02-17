@@ -14,7 +14,7 @@ use crate::classic::clvm_tools::stages::stage_0::{DefaultProgramRunner, TRunProg
 
 use crate::compiler::cldb::hex_to_modern_sexp;
 use crate::compiler::clvm;
-use crate::compiler::clvm::{convert_from_clvm_rs, sha256tree, truthy};
+use crate::compiler::clvm::{convert_from_clvm_rs, sha256tree, sha256tree_from_atom, truthy};
 use crate::compiler::compiler::{compile_from_compileform, compile_pre_forms};
 use crate::compiler::comptypes::{
     BodyForm, CompileErr, CompileForm, CompilerOpts, CompilerOutput, ConstantKind, DefconstData,
@@ -624,12 +624,16 @@ impl Preprocessor {
         if let Ok((full_name, content)) =
             self.opts.read_new_file(self.opts.filename(), filename_clsp)
         {
+            // Hash newly read input.
+            let content_hash = sha256tree_from_atom(&content);
             includes.push(IncludeDesc {
                 kw: kw.clone(),
                 nl: nl.clone(),
                 name: full_name.as_bytes().to_vec(),
                 kind: Some(IncludeProcessType::Module(Box::new(kind.clone()))),
+                fingerprint: content_hash,
             });
+
             return self.import_program(includes, import_name, &full_name, &content);
         }
 
@@ -653,6 +657,7 @@ impl Preprocessor {
             nl: nl.clone(),
             name: full_name.as_bytes().to_vec(),
             kind: Some(IncludeProcessType::Module(Box::new(kind.clone()))),
+            fingerprint: sha256tree_from_atom(&content),
         });
 
         Ok(res)
@@ -787,8 +792,12 @@ impl Preprocessor {
         }
 
         let (full_name, content) = self.opts.read_new_file(self.opts.filename(), name_string)?;
+
+        // Hash newly read input.
+        let content_hash = sha256tree_from_atom(&content);
         includes.push(IncludeDesc {
             name: full_name.as_bytes().to_vec(),
+            fingerprint: content_hash,
             ..desc
         });
 
@@ -1093,6 +1102,7 @@ impl Preprocessor {
                 nl: import.nl.clone(),
                 name: fname.clone(),
                 kind: Some(mod_kind.clone()),
+                fingerprint: Vec::new(),
             }),
             mod_kind,
             fname.clone(),
@@ -1156,6 +1166,7 @@ impl Preprocessor {
                 nl: nl.clone(),
                 name: fname.clone(),
                 kind: None,
+                fingerprint: Vec::new(),
             })));
         }
 
@@ -1192,6 +1203,7 @@ impl Preprocessor {
                         nl: nl.clone(),
                         kind: Some(IncludeProcessType::Hex),
                         name: fname.clone(),
+                        fingerprint: Vec::new(),
                     }),
                     IncludeProcessType::Hex,
                     name.clone(),
@@ -1203,6 +1215,7 @@ impl Preprocessor {
                         nl: nl.clone(),
                         kind: Some(IncludeProcessType::Bin),
                         name: fname.clone(),
+                        fingerprint: Vec::new(),
                     }),
                     IncludeProcessType::Bin,
                     name.clone(),
@@ -1214,6 +1227,7 @@ impl Preprocessor {
                         nl: nl.clone(),
                         kind: Some(IncludeProcessType::SExpression),
                         name: fname.clone(),
+                        fingerprint: Vec::new(),
                     }),
                     IncludeProcessType::SExpression,
                     name.clone(),
@@ -1246,6 +1260,7 @@ impl Preprocessor {
                     nl: nl.clone(),
                     kind: Some(IncludeProcessType::Compiled),
                     name: fname.clone(),
+                    fingerprint: Vec::new(),
                 }),
                 IncludeProcessType::Compiled,
                 name.clone(),
