@@ -389,6 +389,7 @@ pub fn compile_module(
     let loc = program.loc();
     let mut dialect = opts.dialect();
     dialect.int_fix = true;
+    dialect.stepping = dialect.stepping.map(|x| std::cmp::max(x, 24));
     opts = opts.set_optimize(true).set_dialect(dialect);
 
     if exports.is_empty() {

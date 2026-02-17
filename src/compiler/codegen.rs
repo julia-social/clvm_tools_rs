@@ -762,9 +762,10 @@ fn compile_call(
                             call.loc.clone(),
                             Rc::new(primquote(call.loc.clone(), Rc::new(code))),
                         )),
-                        CompilerOutput::Module(_) => {
-                            todo!();
-                        }
+                        CompilerOutput::Module(_) => Err(CompileErr(
+                            call.loc.clone(),
+                            "Module result from com form not supported".to_string(),
+                        )),
                     }
                 } else {
                     error.clone()
@@ -1053,7 +1054,11 @@ fn codegen_(
                     match code {
                         CompilerOutput::Program(_, p) => p,
                         CompilerOutput::Module(_) => {
-                            todo!();
+                            return Err(CompileErr(
+                                defun.loc.clone(),
+                                "Module result from function code generation not supported"
+                                    .to_string(),
+                            ));
                         }
                     }
                 };
@@ -1758,7 +1763,10 @@ fn generate_simple_constant_body(
     {
         CompilerOutput::Program(_, code) => code,
         CompilerOutput::Module(_) => {
-            todo!();
+            return Err(CompileErr(
+                defc.loc.clone(),
+                "Module result from constant computation not supported".to_string(),
+            ));
         }
     };
 
@@ -1936,11 +1944,7 @@ fn generate_helper_body(
                 mtype,
                 h,
                 defc,
-            ), /*
-               ConstantKind::Module(false) => {
-                   todo!();
-               }
-               */
+            ),
         },
         HelperForm::Defmacro(mac) => {
             let macro_program = Rc::new(SExp::Cons(
@@ -1964,7 +1968,10 @@ fn generate_helper_body(
                 match updated_opts.compile_program(&mut context_wrapper.context, macro_program)? {
                     CompilerOutput::Program(_, p) => p,
                     CompilerOutput::Module(_) => {
-                        todo!();
+                        return Err(CompileErr(
+                            mac.loc.clone(),
+                            "Module result from macro not supported".to_string(),
+                        ));
                     }
                 };
 
