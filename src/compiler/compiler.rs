@@ -19,8 +19,8 @@ use crate::compiler::clvm::{convert_to_clvm_rs, run, sha256tree, NewStyleIntConv
 use crate::compiler::codegen::{codegen, hoist_body_let_binding, process_helper_let_bindings};
 use crate::compiler::comptypes::{
     BodyForm, CompileErr, CompileForm, CompileModuleComponent, CompileModuleOutput, CompilerOpts,
-    CompilerOutput, DefunData, Export, FrontendOutput, HelperForm, ImportLongName, IncludeDesc,
-    IncludeProcessType, PrimaryCodegen, SyntheticType,
+    CompilerOutput, ConstantKind, DefunData, Export, FrontendOutput, HelperForm, ImportLongName, IncludeDesc,
+    IncludeProcessType, ModulePhase, PrimaryCodegen, StandalonePhaseInfo, SyntheticType,
 };
 use crate::compiler::dialect::{AcceptedDialect, KNOWN_DIALECTS};
 use crate::compiler::diskcache::{set_cache_element, try_element_from_cache};
@@ -102,6 +102,7 @@ pub struct DefaultCompilerOpts {
     pub prim_map: Rc<HashMap<Vec<u8>, Rc<SExp>>>,
     pub diag_flags: Rc<HashSet<usize>>,
     pub dialect: AcceptedDialect,
+    pub module_phase: Option<ModulePhase>,
 }
 
 pub fn create_prim_map() -> Rc<HashMap<Vec<u8>, Rc<SExp>>> {
@@ -200,6 +201,54 @@ pub fn find_exported_helper(
         find_helper_target(opts.clone(), &program.helpers, None, fun_name, &parsed_name)?
             .map(|(_, result)| result.clone()),
     )
+}
+
+fn modernize_constants(helpers: &mut [HelperForm], standalone_constants: &HashSet<Vec<u8>>) {
+    for h in helpers.iter_mut() {
+        match h {
+            HelperForm::Defconstant(d) => {
+                // Ensure that we upgrade the constant type.
+                d.tabled = false;
+                if standalone_constants.contains(&d.name) {
+                    d.kind = ConstantKind::Module(false);
+                }
+            }
+            HelperForm::Defnamespace(ns) => {
+                modernize_constants(&mut ns.helpers, standalone_constants);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn capture_standalone_constants(
+    standalone_constants: &mut HashSet<Vec<u8>>,
+    depgraph: &FunctionDependencyGraph,
+    helpers: &[HelperForm],
+    exports: &[Export],
+) {
+    // Find constants on which nothing depends (they're only output).
+    for h in helpers.iter() {
+        if let HelperForm::Defnamespace(ns) = h {
+            capture_standalone_constants(standalone_constants, depgraph, &ns.helpers, exports)
+        } else if matches!(h, HelperForm::Defconstant(_) | HelperForm::Defun(_, _)) {
+            let match_exports = exports.iter().any(|e| match e {
+                Export::MainProgram(_) => false,
+                Export::Function(exdef) => &exdef.name.value == h.name(),
+            });
+
+            // It isn't exported so it isn't standalone.
+            if !match_exports {
+                continue;
+            }
+
+            let mut constant_is_depended = HashSet::new();
+            depgraph.get_full_depended_on_by(&mut constant_is_depended, h.name());
+            if constant_is_depended.is_empty() {
+                standalone_constants.insert(h.name().to_vec());
+            }
+        }
+    }
 }
 
 fn get_hex_name_of_export(
@@ -355,6 +404,7 @@ pub fn compile_module(
             program.exp = desc.expr.clone();
 
             program = resolve_namespaces(opts.clone(), &program)?;
+            modernize_constants(&mut program.helpers, standalone_constants);
 
             let output = Rc::new(compile_from_compileform(
                 context,
@@ -396,16 +446,58 @@ pub fn compile_module(
 
     // First pass compilation: remove standalone constant helpers and produce
     // a body which contains all the non-standalone exports.
-    let common_program = resolve_namespaces(
-        opts.clone(),
+
+    let common_opts_assume_introspection =
+        opts.set_module_phase(Some(ModulePhase::CommonPhase(true)));
+    let common_program_assume_introspection = resolve_namespaces(
+        common_opts_assume_introspection.clone(),
         &form_module_program_common_body(standalone_constants, program.clone(), exports)?,
     )?;
-    let common_output = compile_from_compileform(context, opts.clone(), common_program.clone())?;
+
+    let common_phase_functions = common_program_assume_introspection
+        .helpers
+        .iter()
+        .any(|h| matches!(h, HelperForm::Defun(_, _)));
+    let (common_opts, mut common_program) = if !common_phase_functions {
+        let new_opts =
+            opts.set_module_phase(Some(ModulePhase::CommonPhase(common_phase_functions)));
+        (
+            new_opts.clone(),
+            resolve_namespaces(
+                new_opts,
+                &form_module_program_common_body(standalone_constants, program.clone(), exports)?,
+            )?,
+        )
+    } else {
+        (
+            common_opts_assume_introspection.clone(),
+            common_program_assume_introspection.clone(),
+        )
+    };
+    modernize_constants(&mut common_program.helpers, standalone_constants);
+    let common_output = compile_from_compileform(context, common_opts, common_program.clone())?;
 
     let mut captured_export_map: BTreeMap<Vec<u8>, Rc<SExp>> = BTreeMap::new();
     // Capture exports that are members of the common set.
     // We get a triple of output: (env_shape env code)
-    let code = Rc::new(common_output.clone());
+    let (env_shape, env, code) = (|| {
+        if let Some(lst) = common_output.proper_list() {
+            if lst.len() == 3 {
+                return Ok((
+                    Rc::new(lst[0].clone()),
+                    Rc::new(lst[1].clone()),
+                    Rc::new(lst[2].clone()),
+                ));
+            }
+        }
+
+        Err(CompileErr(
+            common_program.loc(),
+            format!(
+                "Wrong environment shape result from common phase code generation: {common_output}"
+            ),
+        ))
+    })()?;
 
     populate_export_map(context, &mut captured_export_map, opts.clone(), code)?;
 
@@ -414,6 +506,12 @@ pub fn compile_module(
         program.loc(),
         4_u32.to_bigint().unwrap(),
     )));
+    let second_stage_opts =
+        opts.set_module_phase(Some(ModulePhase::StandalonePhase(StandalonePhaseInfo {
+            env: env_shape,
+            empty_common_phase: !common_phase_functions,
+            left_env_value: env,
+        })));
     for fun in exports.iter() {
         let (fun_name, export_name) = if let Export::Function(exdef) = fun {
             // Otherwise, capture it to produce to the output.
@@ -472,12 +570,16 @@ pub fn compile_module(
         };
 
         // remove_standalone_constant(&mut second_stage_program, &fun_name);
-        let constant_culled_second_stage_program =
-            resolve_namespaces(opts.clone(), &second_stage_program)?;
+        let mut constant_culled_second_stage_program =
+            resolve_namespaces(second_stage_opts.clone(), &second_stage_program)?;
+        modernize_constants(
+            &mut constant_culled_second_stage_program.helpers,
+            standalone_constants,
+        );
 
         let compiled_result = Rc::new(compile_from_compileform(
             context,
-            opts.clone(),
+            second_stage_opts.clone(),
             constant_culled_second_stage_program,
         )?);
 
@@ -646,36 +748,6 @@ fn form_hash_expression(inner_exp: Rc<BodyForm>) -> Rc<BodyForm> {
     ))
 }
 
-fn capture_standalone_constants(
-    standalone_constants: &mut HashSet<Vec<u8>>,
-    depgraph: &FunctionDependencyGraph,
-    helpers: &[HelperForm],
-    exports: &[Export],
-) {
-    // Find constants on which nothing depends (they're only output).
-    for h in helpers.iter() {
-        if let HelperForm::Defnamespace(ns) = h {
-            capture_standalone_constants(standalone_constants, depgraph, &ns.helpers, exports)
-        } else if matches!(h, HelperForm::Defconstant(_) | HelperForm::Defun(_, _)) {
-            let match_exports = exports.iter().any(|e| match e {
-                Export::MainProgram(_) => false,
-                Export::Function(exdef) => &exdef.name.value == h.name(),
-            });
-
-            // It isn't exported so it isn't standalone.
-            if !match_exports {
-                continue;
-            }
-
-            let mut constant_is_depended = HashSet::new();
-            depgraph.get_full_depended_on_by(&mut constant_is_depended, h.name());
-            if constant_is_depended.is_empty() {
-                standalone_constants.insert(h.name().to_vec());
-            }
-        }
-    }
-}
-
 fn add_inline_hash_for_constant(program: &mut CompileForm, loc: &Srcloc, fun_name: &[u8]) {
     let mut new_name = fun_name.to_vec();
     new_name.extend(b"_hash".to_vec());
@@ -745,6 +817,7 @@ pub fn compile_pre_forms(
             );
 
             let mut standalone_constants = HashSet::new();
+
             capture_standalone_constants(
                 &mut standalone_constants,
                 &depgraph,
@@ -779,6 +852,7 @@ pub fn compile_file(
         symbol_table,
         get_optimizer(&srcloc, opts.clone())?,
     );
+
     compile_pre_forms(&mut context_wrapper.context, opts, &pre_forms)
 }
 
@@ -803,6 +877,9 @@ impl CompilerOpts for DefaultCompilerOpts {
     }
     fn frontend_opt(&self) -> bool {
         self.frontend_opt
+    }
+    fn module_phase(&self) -> Option<ModulePhase> {
+        self.module_phase.clone()
     }
     fn frontend_check_live(&self) -> bool {
         self.frontend_check_live
@@ -866,6 +943,11 @@ impl CompilerOpts for DefaultCompilerOpts {
     fn set_frontend_check_live(&self, check: bool) -> Rc<dyn CompilerOpts> {
         let mut copy = self.clone();
         copy.frontend_check_live = check;
+        Rc::new(copy)
+    }
+    fn set_module_phase(&self, module_phase: Option<ModulePhase>) -> Rc<dyn CompilerOpts> {
+        let mut copy = self.clone();
+        copy.module_phase = module_phase;
         Rc::new(copy)
     }
     fn set_code_generator(&self, new_code_generator: PrimaryCodegen) -> Rc<dyn CompilerOpts> {
@@ -968,7 +1050,7 @@ impl CompilerOpts for DefaultCompilerOpts {
         sexp: Rc<SExp>,
     ) -> Result<CompilerOutput, CompileErr> {
         let _int_conversion_bug = NewStyleIntConversion::new(self.dialect.int_fix);
-        let me = Rc::new(self.clone());
+        let me = self.set_module_phase(None);
         compile_pre_forms(context, me, &[sexp])
     }
 }
@@ -988,6 +1070,7 @@ impl DefaultCompilerOpts {
             dialect: AcceptedDialect::default(),
             prim_map: create_prim_map(),
             disassembly_ver: None,
+            module_phase: None,
             diag_flags: Rc::new(HashSet::default()),
         }
     }

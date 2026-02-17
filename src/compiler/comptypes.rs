@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::fmt::Debug;
 use std::rc::Rc;
 
 use serde::Serialize;
@@ -59,6 +59,7 @@ impl InlineFunction {
 
 /// Specifies the type of application that any form (X ...) invokes in an
 /// expression position.
+#[derive(Debug, Clone)]
 pub enum Callable {
     /// The expression is a macro expansion (list, if etc.)
     CallMacro(Srcloc, SExp),
@@ -281,6 +282,9 @@ pub struct DefconstData {
 pub enum ConstantKind {
     Complex,
     Simple,
+    /// Module toplevel constants have extra guarantees which need a different
+    /// resolution style.
+    Module(bool),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
@@ -454,57 +458,6 @@ pub enum ModuleImportSpec {
     Exposing(Srcloc, Vec<ModuleImportListedName>),
     /// All but these names are in the toplevel namespace after the import.
     Hiding(Srcloc, Vec<ModuleImportListedName>),
-}
-
-pub fn match_as_named(loc: Srcloc, lst: &[SExp], offset: usize) -> Option<ExportFunctionDesc> {
-    let name_offset = offset;
-    let small = 1 + offset;
-    let as_kw = 1 + offset;
-    let as_name_offset = 2 + offset;
-    let large = 3 + offset;
-
-    if lst.len() != small && lst.len() != large {
-        return None;
-    }
-
-    let (_from_loc, from_name) = if let SExp::Atom(from_loc, from_name) = lst[name_offset].borrow()
-    {
-        (from_loc.clone(), from_name.clone())
-    } else {
-        return None;
-    };
-
-    let mut result = ExportFunctionDesc {
-        loc,
-        kw_loc: Some(lst[0].loc()),
-        name: NameAndLoc {
-            value: from_name,
-            loc: Some(lst[name_offset].loc()),
-        },
-        as_loc: None,
-        as_name: None,
-    };
-
-    if lst.len() == large {
-        if let SExp::Atom(as_loc, as_atom) = lst[as_kw].borrow() {
-            // Not 'as'
-            if as_atom != b"as" {
-                return None;
-            }
-            result.as_loc = Some(as_loc.clone());
-        } else {
-            return None;
-        }
-
-        if let SExp::Atom(as_name_loc, as_name) = lst[as_name_offset].borrow() {
-            result.as_name = Some(NameAndLoc {
-                value: as_name.clone(),
-                loc: Some(as_name_loc.clone()),
-            });
-        }
-    };
-
-    Some(result)
 }
 
 impl ModuleImportSpec {
@@ -707,6 +660,57 @@ pub struct NamespaceRefData {
     pub specification: ModuleImportSpec,
 }
 
+pub fn match_as_named(loc: Srcloc, lst: &[SExp], offset: usize) -> Option<ExportFunctionDesc> {
+    let name_offset = offset;
+    let small = 1 + offset;
+    let as_kw = 1 + offset;
+    let as_name_offset = 2 + offset;
+    let large = 3 + offset;
+
+    if lst.len() != small && lst.len() != large {
+        return None;
+    }
+
+    let (_from_loc, from_name) = if let SExp::Atom(from_loc, from_name) = lst[name_offset].borrow()
+    {
+        (from_loc.clone(), from_name.clone())
+    } else {
+        return None;
+    };
+
+    let mut result = ExportFunctionDesc {
+        loc,
+        kw_loc: Some(lst[0].loc()),
+        name: NameAndLoc {
+            value: from_name,
+            loc: Some(lst[name_offset].loc()),
+        },
+        as_loc: None,
+        as_name: None,
+    };
+
+    if lst.len() == large {
+        if let SExp::Atom(as_loc, as_atom) = lst[as_kw].borrow() {
+            // Not 'as'
+            if as_atom != b"as" {
+                return None;
+            }
+            result.as_loc = Some(as_loc.clone());
+        } else {
+            return None;
+        }
+
+        if let SExp::Atom(as_name_loc, as_name) = lst[as_name_offset].borrow() {
+            result.as_name = Some(NameAndLoc {
+                value: as_name.clone(),
+                loc: Some(as_name_loc.clone()),
+            });
+        }
+    };
+
+    Some(result)
+}
+
 /// HelperForm is a toplevel binding of some kind.
 /// Helpers are the (defconst ...) (defun ...) (defun-inline ...) (defmacro ...)
 /// forms from the source code and "help" the program do its job.  They're
@@ -861,6 +865,43 @@ pub struct DefunCall {
     pub code: Rc<SExp>,
 }
 
+/// A structure that contains info needed to do separate standalone generation
+/// on top of the common part of module constant generation.
+#[derive(Clone)]
+pub struct StandalonePhaseInfo {
+    pub empty_common_phase: bool,
+    pub env: Rc<SExp>,
+    pub left_env_value: Rc<SExp>,
+}
+
+impl Debug for StandalonePhaseInfo {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(formatter, "{}, {}", self.env, self.left_env_value)
+    }
+}
+
+/// If compiling modules, tell what module phase we're in.  It affects how the
+/// environment is passed on to functions when treated as values.  In this
+/// position, a function that is exported or common between more than one exported
+/// constant must use the common environment without the additions from the local
+/// environment of the constant being evaluated.
+#[derive(Clone)]
+pub enum ModulePhase {
+    CommonPhase(bool),
+    CommonConstant(SExp),
+    StandalonePhase(StandalonePhaseInfo),
+}
+
+impl Debug for ModulePhase {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            ModulePhase::CommonPhase(funs) => write!(formatter, "CommonPhase({funs})"),
+            ModulePhase::CommonConstant(env) => write!(formatter, "CommonConstant({env})"),
+            ModulePhase::StandalonePhase(sp) => write!(formatter, "StandalonePhase({sp:?})"),
+        }
+    }
+}
+
 /// PrimaryCodegen is an object used by codegen to accumulate and use state needed
 /// during code generation.  It's mostly used internally.
 #[derive(Clone, Debug)]
@@ -876,9 +917,11 @@ pub struct PrimaryCodegen {
     pub to_process: Vec<HelperForm>,
     pub original_helpers: Vec<HelperForm>,
     pub final_expr: Rc<BodyForm>,
+    pub final_env: Rc<SExp>,
     pub final_code: Option<CompiledCode>,
     pub function_symbols: HashMap<String, String>,
     pub left_env: bool,
+    pub module_phase: Option<ModulePhase>,
 }
 
 /// The CompilerOpts specifies global options used during compilation.
@@ -912,6 +955,8 @@ pub trait CompilerOpts {
     /// Specifies whether forms not reachable at runtime are included in the
     /// resulting CompileForm.
     fn frontend_check_live(&self) -> bool;
+    /// Phase of module generation.
+    fn module_phase(&self) -> Option<ModulePhase>;
     /// Specifies the shape of the environment to use.  This allows injection of
     /// the parent program's left environment when some form is compiled in the
     /// parent's context.
@@ -943,6 +988,8 @@ pub trait CompilerOpts {
     /// Set whether to filter out each HelperForm that isn't reachable at
     /// run time.
     fn set_frontend_check_live(&self, check: bool) -> Rc<dyn CompilerOpts>;
+    /// Set module generation phase (for stable constants).
+    fn set_module_phase(&self, module_phase: Option<ModulePhase>) -> Rc<dyn CompilerOpts>;
     /// Set the codegen object to be used downstream.
     fn set_code_generator(&self, new_compiler: PrimaryCodegen) -> Rc<dyn CompilerOpts>;
     /// Set the environment shape to assume.
@@ -960,8 +1007,11 @@ pub trait CompilerOpts {
         filename: String,
     ) -> Result<(String, Vec<u8>), CompileErr>;
 
-    fn write_new_file(&self, target: &str, content: &[u8]) -> Result<(), CompileErr>;
-    fn get_file_mod_date(&self, loc: &Srcloc, filename: &str) -> Result<u64, CompileErr>;
+    /// Give the modified date for the indicated file.
+    fn get_file_mod_date(&self, loc: &Srcloc, fiilename: &str) -> Result<u64, CompileErr>;
+
+    /// Fully write a file to the filesystem.
+    fn write_new_file(&self, target_path: &str, content: &[u8]) -> Result<(), CompileErr>;
 
     /// Given a parsed SExp, compile it as an independent program based on the
     /// settings given here.  The result is bare generated code.
@@ -1024,10 +1074,16 @@ pub trait HasCompilerOptsDelegation {
     fn override_get_search_paths(&self) -> Vec<String> {
         self.compiler_opts().get_search_paths()
     }
+    fn override_module_phase(&self) -> Option<ModulePhase> {
+        self.compiler_opts().module_phase()
+    }
     fn override_diag_flags(&self) -> Rc<HashSet<usize>> {
         self.compiler_opts().diag_flags()
     }
 
+    fn override_set_filename(&self, new_filename: &str) -> Rc<dyn CompilerOpts> {
+        self.update_compiler_opts(|o| o.set_filename(new_filename))
+    }
     fn override_set_dialect(&self, dialect: AcceptedDialect) -> Rc<dyn CompilerOpts> {
         self.update_compiler_opts(|o| o.set_dialect(dialect))
     }
@@ -1058,11 +1114,11 @@ pub trait HasCompilerOptsDelegation {
     fn override_set_start_env(&self, start_env: Option<Rc<SExp>>) -> Rc<dyn CompilerOpts> {
         self.update_compiler_opts(|o| o.set_start_env(start_env))
     }
+    fn override_set_module_phase(&self, module_phase: Option<ModulePhase>) -> Rc<dyn CompilerOpts> {
+        self.update_compiler_opts(|o| o.set_module_phase(module_phase))
+    }
     fn override_set_diag_flags(&self, flags: Rc<HashSet<usize>>) -> Rc<dyn CompilerOpts> {
         self.update_compiler_opts(|o| o.set_diag_flags(flags))
-    }
-    fn override_set_filename(&self, filename: &str) -> Rc<dyn CompilerOpts> {
-        self.update_compiler_opts(|o| o.set_filename(filename))
     }
     fn override_set_prim_map(
         &self,
@@ -1077,18 +1133,19 @@ pub trait HasCompilerOptsDelegation {
     ) -> Result<(String, Vec<u8>), CompileErr> {
         self.compiler_opts().read_new_file(inc_from, filename)
     }
-    fn override_write_new_file(&self, target: &str, content: &[u8]) -> Result<(), CompileErr> {
-        self.compiler_opts().write_new_file(target, content)
-    }
-    fn override_get_file_mod_date(&self, loc: &Srcloc, filename: &str) -> Result<u64, CompileErr> {
-        self.compiler_opts().get_file_mod_date(loc, filename)
-    }
     fn override_compile_program(
         &self,
         context: &mut BasicCompileContext,
         sexp: Rc<SExp>,
     ) -> Result<CompilerOutput, CompileErr> {
         self.compiler_opts().compile_program(context, sexp)
+    }
+    /// Fully write a file to the filesystem.
+    fn override_write_new_file(&self, target_path: &str, content: &[u8]) -> Result<(), CompileErr> {
+        self.compiler_opts().write_new_file(target_path, content)
+    }
+    fn override_get_file_mod_date(&self, loc: &Srcloc, filename: &str) -> Result<u64, CompileErr> {
+        self.compiler_opts().get_file_mod_date(loc, filename)
     }
 }
 
@@ -1134,6 +1191,16 @@ impl<T: HasCompilerOptsDelegation> CompilerOpts for T {
         self.override_diag_flags()
     }
 
+    fn module_phase(&self) -> Option<ModulePhase> {
+        self.override_module_phase()
+    }
+
+    fn set_module_phase(&self, module_phase: Option<ModulePhase>) -> Rc<dyn CompilerOpts> {
+        self.override_set_module_phase(module_phase)
+    }
+    fn set_filename(&self, filename: &str) -> Rc<dyn CompilerOpts> {
+        self.override_set_filename(filename)
+    }
     fn set_dialect(&self, dialect: AcceptedDialect) -> Rc<dyn CompilerOpts> {
         self.override_set_dialect(dialect)
     }
@@ -1170,8 +1237,11 @@ impl<T: HasCompilerOptsDelegation> CompilerOpts for T {
     fn set_diag_flags(&self, new_flags: Rc<HashSet<usize>>) -> Rc<dyn CompilerOpts> {
         self.override_set_diag_flags(new_flags)
     }
-    fn set_filename(&self, filename: &str) -> Rc<dyn CompilerOpts> {
-        self.override_set_filename(filename)
+    fn write_new_file(&self, target: &str, content: &[u8]) -> Result<(), CompileErr> {
+        self.override_write_new_file(target, content)
+    }
+    fn get_file_mod_date(&self, loc: &Srcloc, filename: &str) -> Result<u64, CompileErr> {
+        self.override_get_file_mod_date(loc, filename)
     }
     fn read_new_file(
         &self,
@@ -1179,12 +1249,6 @@ impl<T: HasCompilerOptsDelegation> CompilerOpts for T {
         filename: String,
     ) -> Result<(String, Vec<u8>), CompileErr> {
         self.override_read_new_file(inc_from, filename)
-    }
-    fn write_new_file(&self, target: &str, content: &[u8]) -> Result<(), CompileErr> {
-        self.override_write_new_file(target, content)
-    }
-    fn get_file_mod_date(&self, loc: &Srcloc, filename: &str) -> Result<u64, CompileErr> {
-        self.override_get_file_mod_date(loc, filename)
     }
     fn compile_program(
         &self,
