@@ -1,0 +1,46 @@
+name: Chia Gaming tests
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+    tags:
+        - '**'
+  pull_request:
+    branches:
+      - '**'
+
+jobs:
+  chia_gaming_tests:
+    name: Extensive Chia Gaming tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+
+    - name: Checkout chia-gaming
+      usess: actions/checkout@v6
+      with:
+        repository: Chia-Network/chia-gaming
+        path: chia-gaming
+        ref: main
+
+    - name: Replace chialisp pkg in chia-gaming
+      run: |
+        python3 support/change-chialisp-rev.py ${{ env.CHIALISP_REV }} chia-gaming/Cargo.toml
+
+    - name: Install chia-gaming dependencies
+      run: |
+        cd chia-gaming
+        #pip install -e .
+        ./tools/check-deps.sh --install
+
+    - name: Run chia-gaming tests
+      run: |
+        cd chia-gaming
+        ./run-all-tests.sh
