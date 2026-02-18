@@ -314,7 +314,7 @@ impl ImportLongName {
     }
 
     /// Render to a string of readable bytes.
-    pub fn as_u8_vec(&self, filename: LongNameTranslation) -> Vec<u8> {
+    pub fn as_u8_vec(&self, _filename: LongNameTranslation) -> Vec<u8> {
         let mut result_vec = vec![];
         let sep = b'.';
         for (i, c) in self.components.iter().enumerate() {
