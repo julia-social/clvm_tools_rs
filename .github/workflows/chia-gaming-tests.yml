@@ -46,7 +46,7 @@ jobs:
     - name: Install chia-gaming dependencies
       run: |
         cd chia-gaming
-        ./tools/check-deps.sh --install
+        ./tools/check-build-deps.sh --install --yes
 
     - name: Rebuild chia-gaming chialisp
       run: |
