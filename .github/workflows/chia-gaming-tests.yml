@@ -48,7 +48,13 @@ jobs:
         cd chia-gaming
         ./tools/check-deps.sh --install
 
-    - name: Run chia-gaming tests
+    - name: Rebuild chia-gaming chialisp
+      run: |
+        cp support/chia-gaming-build.rs chia-gaming/build.rs
+        cd chia-gaming
+        cargo build
+
+    - name: Run chia-gaming chialisp tests
       run: |
         cd chia-gaming
-        ./run-all-tests.sh
+        ./tools/run-clsp-tests.sh
