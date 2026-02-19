@@ -41,12 +41,11 @@ jobs:
 
     - name: Replace chialisp pkg in chia-gaming
       run: |
-        python3 support/change-chialisp-rev.py ${{ env.CHIALISP_REV }} chia-gaming/Cargo.toml
+        python3 support/change-chialisp-rev.py ${{ github.sha }} chia-gaming/Cargo.toml
 
     - name: Install chia-gaming dependencies
       run: |
         cd chia-gaming
-        #pip install -e .
         ./tools/check-deps.sh --install
 
     - name: Run chia-gaming tests
