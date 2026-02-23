@@ -101,6 +101,7 @@ pub fn check_parameters_used_compileform(
         allocator: Allocator::new(),
         runner: runner.clone(),
         symbols: HashMap::new(),
+        funcache: None,
         optimizer: get_optimizer(&program.loc(), opts.clone())?,
     };
     let result = e.shrink_bodyform(

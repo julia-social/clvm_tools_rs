@@ -2,9 +2,12 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::rc::Rc;
 
 use crate::compiler::codegen::codegen;
+use crate::compiler::compiler::TTI;
+use crate::compiler::comptypes::ModulePhase;
 use crate::compiler::optimize::depgraph::{DepgraphKind, FunctionDependencyGraph};
 use crate::compiler::optimize::{sexp_scale, SyntheticType};
-use crate::compiler::{BasicCompileContext, CompileErr, CompileForm, CompilerOpts, HelperForm};
+use crate::compiler::sexp::decode_string;
+use crate::compiler::{BasicCompileContext, CompileErr, CompileForm, CompilerOpts, HelperForm, Funcache};
 
 // Find the roots for the given function.
 fn find_roots(
@@ -54,14 +57,28 @@ pub fn deinline_opt(
         return Ok(compileform);
     }
 
-    let depgraph = FunctionDependencyGraph::new(&compileform);
+    let cfsexp = compileform.to_sexp();
+    let mut t = TTI::new("deinline_opt".to_string());
+    t.ttyell(&format!("{} stepping over 24 {} {cfsexp}", opts.filename(), stepping_over_24(opts.clone())));
+
+    if context.funcache.is_none() {
+        context.funcache = Some(Funcache {
+            function_outputs: HashMap::new(),
+            dependency_graph: FunctionDependencyGraph::new(&compileform)
+        });
+    }
 
     let mut best_compileform = compileform.clone();
     let generated_program = codegen(context, opts.clone(), &best_compileform)?;
     let mut metric = sexp_scale(&generated_program);
+    let is_module_compile = opts.module_phase().is_some();
+
     let flip_helper = |h: &mut HelperForm| {
         if let HelperForm::Defun(inline, defun) = h {
-            if matches!(&defun.synthetic, Some(SyntheticType::NoInlinePreference)) {
+            // Since the convention of module programs is non-inline for synthetics, no program
+            // in my test set lost weight by switching inline off after losing weight by switching
+            // it on, and the cost of this search can be high.
+            if matches!(&defun.synthetic, Some(SyntheticType::NoInlinePreference)) && (!is_module_compile || !*inline) {
                 *h = HelperForm::Defun(!*inline, defun.clone());
                 return true;
             }
@@ -105,18 +122,22 @@ pub fn deinline_opt(
     // until we reach a root.
     //
     // Remember the root this function belongs to.
-    let leaves: Vec<Vec<u8>> = depgraph
-        .leaves()
-        .iter()
-        .filter(|l| {
-            depgraph
-                .helpers
-                .get(&l.to_vec())
-                .map(|l| !matches!(l.status, DepgraphKind::UserNonInline))
-                .unwrap_or(false)
-        })
-        .cloned()
-        .collect();
+    let leaves: Vec<Vec<u8>> = {
+        let depgraph = &context.funcache.as_ref().unwrap().dependency_graph;
+
+        depgraph
+            .leaves()
+            .iter()
+            .filter(|l| {
+                depgraph
+                    .helpers
+                    .get(&l.to_vec())
+                    .map(|l| !matches!(l.status, DepgraphKind::UserNonInline))
+                    .unwrap_or(false)
+            })
+            .cloned()
+            .collect()
+    };
 
     let mut roots: HashMap<Vec<u8>, BTreeSet<Vec<u8>>> = HashMap::new();
 
@@ -124,7 +145,10 @@ pub fn deinline_opt(
     for l in leaves.iter() {
         let mut visited = HashSet::new();
         let mut leaf_roots = BTreeSet::new();
-        find_roots(&mut visited, &mut leaf_roots, &depgraph, l);
+        {
+            let depgraph = &context.funcache.as_ref().unwrap().dependency_graph;
+            find_roots(&mut visited, &mut leaf_roots, &depgraph, l);
+        }
         if leaf_roots.is_empty() {
             leaf_roots.insert(l.to_vec());
         }
@@ -181,7 +205,10 @@ pub fn deinline_opt(
             let mut full_tree_set = HashSet::new();
             for root in root_set.iter() {
                 let mut full_tree = HashSet::new();
-                depgraph.get_full_depends_on(&mut full_tree, root);
+                {
+                    let depgraph = &context.funcache.as_ref().unwrap().dependency_graph;
+                    depgraph.get_full_depends_on(&mut full_tree, root);
+                }
                 full_tree_set = full_tree.union(&full_tree_set).cloned().collect();
             }
             if full_tree_set.is_empty() {
@@ -210,7 +237,16 @@ pub fn deinline_opt(
         root_set_to_inline_tree_vec.sort();
     }
 
-    for (_, function_set) in root_set_to_inline_tree_vec.iter() {
+    for (i, (_, function_set)) in root_set_to_inline_tree_vec.iter().enumerate() {
+        let names_vec: Vec<String> = function_set.iter().map(|n| decode_string(n)).collect();
+        t.ttyell(&format!("functions set {i}: {names_vec:?}"));
+    }
+
+    let mut count = 0;
+
+    for (i, (_, function_set)) in root_set_to_inline_tree_vec.iter().enumerate() {
+        let mut s = TTI::new(format!("deinline_opt function set {} at {} iters", i, count));
+
         loop {
             let start_metric = metric;
 
@@ -231,6 +267,9 @@ pub fn deinline_opt(
                     continue;
                 }
 
+                count += 1;
+                s.ttyell(&format!("helper {}", decode_string(&old_helper.name())));
+
                 let maybe_smaller_program = codegen(context, opts.clone(), &compileform)?;
                 let new_metric = sexp_scale(&maybe_smaller_program);
 
@@ -238,6 +277,7 @@ pub fn deinline_opt(
                 if new_metric >= metric {
                     compileform.helpers[i] = old_helper;
                 } else {
+                    s.ttyell(&format!("metric {new_metric} better than {metric} for {}", compileform.helpers[i].to_sexp()));
                     metric = new_metric;
                     best_compileform = compileform.clone();
                 }
@@ -249,5 +289,6 @@ pub fn deinline_opt(
         }
     }
 
+    t.ttyell(&format!("{} iters ... done in {} {} {cfsexp}", count, opts.filename(), stepping_over_24(opts.clone())));
     Ok(best_compileform)
 }

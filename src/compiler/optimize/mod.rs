@@ -12,7 +12,7 @@ use clvm_rs::error::EvalErr;
 use num_bigint::ToBigInt;
 
 use std::borrow::Borrow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use clvm_rs::allocator::Allocator;
@@ -24,6 +24,7 @@ use crate::classic::clvm::__type_compatibility__::bi_zero;
 use crate::classic::clvm_tools::stages::stage_0::TRunProgram;
 use crate::classic::clvm_tools::stages::stage_2::optimize::optimize_sexp;
 
+use crate::compiler::BasicCompileContext;
 use crate::compiler::clvm::{convert_from_clvm_rs, convert_to_clvm_rs, run};
 use crate::compiler::codegen::{codegen, do_mod_codegen, get_callable};
 use crate::compiler::comptypes::{
@@ -35,13 +36,13 @@ use crate::compiler::evaluate::{
     build_reflex_captures, dequote, is_i_atom, is_not_atom, Evaluator, EVAL_STACK_LIMIT,
 };
 use crate::compiler::optimize::above22::Strategy23;
+use crate::compiler::optimize::depgraph::{DepgraphOptions, FunctionDependencyGraph};
 use crate::compiler::optimize::strategy::ExistingStrategy;
 use crate::compiler::runtypes::RunFailure;
 #[cfg(test)]
 use crate::compiler::sexp::parse_sexp;
 use crate::compiler::sexp::{AtomValue, NodeSel, SExp, SelectNode, ThisNode};
 use crate::compiler::srcloc::Srcloc;
-use crate::compiler::BasicCompileContext;
 use crate::compiler::CompileContextWrapper;
 use crate::compiler::StartOfCodegenOptimization;
 use crate::util::u8_from_number;
@@ -301,7 +302,11 @@ fn constant_fun_result(
             }
 
             let compiled_body = {
-                let to_compile = CompileForm {
+                // Filter helpers to just things that are directly depended on
+                // by this function.  Nothing else is needed.  Any constant
+                // observation of functions in the tree is handled at the
+                // module phase layer.
+                let mut to_compile = CompileForm {
                     loc: call_spec.loc.clone(),
                     include_forms: Vec::new(),
                     helpers: compiler.original_helpers.clone(),
@@ -324,6 +329,24 @@ fn constant_fun_result(
                         None,
                     )),
                 };
+
+                if opts.module_phase().is_some() {
+                    let depgraph = FunctionDependencyGraph::new_with_options(
+                        &to_compile,
+                        DepgraphOptions {
+                            with_constants: true,
+                        },
+                    );
+                    let mut depended_on = HashSet::default();
+                    depgraph.get_full_depends_on(&mut depended_on, call_spec.name);
+                    to_compile.helpers = compiler
+                        .original_helpers
+                        .iter()
+                        .filter(|h| depended_on.contains(h.name()))
+                        .cloned()
+                        .collect();
+                }
+
                 let optimizer = if let Ok(res) = get_optimizer(&call_spec.loc, opts.clone()) {
                     res
                 } else {

@@ -29,6 +29,7 @@ fn main() {
         allocator: Allocator::new(),
         runner: runner.clone(),
         symbols: HashMap::new(),
+        funcache: None,
         optimizer,
     };
     let stdin = io::stdin();

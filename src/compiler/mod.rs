@@ -46,7 +46,13 @@ use crate::compiler::comptypes::{
     BodyForm, CompileErr, CompileForm, CompilerOpts, DefunData, HelperForm, PrimaryCodegen,
 };
 use crate::compiler::optimize::Optimization;
+use crate::compiler::optimize::depgraph::FunctionDependencyGraph;
 use crate::compiler::sexp::SExp;
+
+pub struct Funcache {
+    function_outputs: HashMap<Vec<u8>, Rc<SExp>>,
+    dependency_graph: FunctionDependencyGraph,
+}
 
 /// An object which represents the standard set of mutable items passed down the
 /// stack when compiling chialisp.
@@ -55,6 +61,9 @@ pub struct BasicCompileContext {
     pub runner: Rc<dyn TRunProgram>,
     pub symbols: HashMap<String, String>,
     pub optimizer: Box<dyn Optimization>,
+    /// Given the operative environment and a serialization of the helper, this is the generated
+    /// code from that helper.
+    pub funcache: Option<Funcache>,
 }
 
 impl BasicCompileContext {
@@ -202,6 +211,7 @@ impl BasicCompileContext {
             runner,
             symbols,
             optimizer,
+            funcache: None,
         }
     }
 }
@@ -245,6 +255,7 @@ impl<'a> CompileContextWrapper<'a> {
             allocator: Allocator::new(),
             runner,
             symbols: HashMap::new(),
+            funcache: None,
             optimizer,
         };
         let mut wrapper = CompileContextWrapper {
@@ -266,6 +277,7 @@ impl<'a> CompileContextWrapper<'a> {
             allocator: Allocator::new(),
             runner,
             symbols: HashMap::new(),
+            funcache: None,
             optimizer,
         };
         let mut wrapper = CompileContextWrapper {

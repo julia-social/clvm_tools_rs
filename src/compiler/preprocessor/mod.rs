@@ -15,7 +15,7 @@ use crate::classic::clvm_tools::stages::stage_0::{DefaultProgramRunner, TRunProg
 use crate::compiler::cldb::hex_to_modern_sexp;
 use crate::compiler::clvm;
 use crate::compiler::clvm::{convert_from_clvm_rs, sha256tree, sha256tree_from_atom, truthy};
-use crate::compiler::compiler::{compile_from_compileform, compile_pre_forms};
+use crate::compiler::compiler::{compile_from_compileform, compile_pre_forms, TTI};
 use crate::compiler::comptypes::{
     BodyForm, CompileErr, CompileForm, CompilerOpts, CompilerOutput, ConstantKind, DefconstData,
     HelperForm, ImportLongName, IncludeDesc, IncludeProcessType, LongNameTranslation,
@@ -465,6 +465,7 @@ impl Preprocessor {
         filename: &str,
         content: &[u8],
     ) -> Result<Vec<Rc<SExp>>, CompileErr> {
+        let _t = TTI::new(format!("import_program {}", filename));
         let srcloc = Srcloc::start(filename);
         let mut allocator = Allocator::new();
         let mut symbol_table = HashMap::new();
@@ -504,6 +505,8 @@ impl Preprocessor {
 
         if !have_module {
             let dialect = detect_modern(&mut allocator, classic_parse);
+            let _t = TTI::new(format!("load module {filename}"));
+
             if dialect.stepping.is_none() {
                 // Classic compile.
                 let newly_compiled = compile_clvm_text_maybe_opt(
@@ -621,6 +624,8 @@ impl Preprocessor {
             &import_name.as_u8_vec(LongNameTranslation::Filename(".clinc".to_string())),
         );
 
+        let _t = TTI::new(format!("import_new_module {:?}", loc));
+
         if let Ok((full_name, content)) =
             self.opts.read_new_file(self.opts.filename(), filename_clsp)
         {
@@ -681,6 +686,8 @@ impl Preprocessor {
             self.add_helper(ns_helper.clone());
             return Ok(vec![ns_helper.to_sexp()]);
         }
+
+        let _t = TTI::new(format!("import_module {nl:?}"));
 
         // Add an empty namespace to be added to while working.
         let empty_ns = self.make_namespace_helper(&loc, &full_import_name);
@@ -1276,6 +1283,7 @@ impl Preprocessor {
         includes: &mut Vec<IncludeDesc>,
         unexpanded_body: Rc<SExp>,
     ) -> Result<Vec<Rc<SExp>>, CompileErr> {
+        let _t = TTI::new(format!("process pp form {}", unexpanded_body));
         let body = self
             .expand_macros(unexpanded_body.clone())?
             .unwrap_or_else(|| unexpanded_body.clone());
@@ -1341,6 +1349,7 @@ impl Preprocessor {
         includes: &mut Vec<IncludeDesc>,
         cmod: &[Rc<SExp>],
     ) -> Result<PreprocessResult, CompileErr> {
+        let _t = TTI::new(format!("pp::run {}", cmod[0].loc().file));
         let mut result = Vec::new();
 
         if self.opts.stdenv() {
@@ -1363,6 +1372,7 @@ impl Preprocessor {
         includes: &mut Vec<IncludeDesc>,
         cmod: &[Rc<SExp>],
     ) -> Result<PreprocessResult, CompileErr> {
+        let _t = TTI::new(format!("pp::run_modules {}", cmod[0].loc().file));
         if !cmod.is_empty() {
             self.prelude_import = Rc::new(SExp::Cons(
                 cmod[0].loc(),

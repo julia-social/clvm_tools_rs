@@ -31,6 +31,7 @@ fn main() {
         allocator: Allocator::new(),
         runner: runner.clone(),
         symbols: HashMap::new(),
+        funcache: None,
         optimizer,
     };
     let args: Vec<String> = env::args().collect();

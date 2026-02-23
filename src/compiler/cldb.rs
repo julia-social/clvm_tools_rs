@@ -18,6 +18,7 @@ use crate::classic::clvm_tools::stages::stage_0::TRunProgram;
 
 use crate::compiler::clvm;
 use crate::compiler::clvm::{convert_from_clvm_rs, run_step, RunStep};
+use crate::compiler::compiler::TTI;
 use crate::compiler::runtypes::RunFailure;
 use crate::compiler::sexp::SExp;
 use crate::compiler::srcloc::Srcloc;
@@ -622,6 +623,7 @@ pub fn hex_to_modern_sexp(
     loc: Srcloc,
     input_program: &str,
 ) -> Result<Rc<SExp>, RunFailure> {
+    let _t = TTI::new(format!("hex_to_modern_sexp {:?}", loc));
     let input_serialized = Bytes::new_validated(Some(UnvalidatedBytesFromType::Hex(
         input_program.to_string(),
     )))

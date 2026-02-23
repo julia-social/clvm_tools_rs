@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 use crate::classic::clvm::__type_compatibility__::bi_one;
+use crate::compiler::compiler::TTI;
 use crate::compiler::comptypes::{
     list_to_cons, match_as_named, ArgsAndTail, Binding, BindingPattern, BodyForm, CompileErr,
     CompileForm, CompilerOpts, ConstantKind, DefconstData, DefmacData, DefunData, Export,
@@ -82,7 +83,7 @@ pub fn collect_used_names_bodyform(body: &BodyForm) -> Vec<Vec<u8>> {
     }
 }
 
-fn collect_used_names_helperform(body: &HelperForm) -> Vec<Vec<u8>> {
+pub fn collect_used_names_helperform(body: &HelperForm) -> Vec<Vec<u8>> {
     match body {
         HelperForm::Defconstant(defc) => collect_used_names_bodyform(defc.body.borrow()),
         HelperForm::Defmacro(mac) => {
@@ -1075,6 +1076,7 @@ pub fn frontend(
     opts: Rc<dyn CompilerOpts>,
     pre_forms: &[Rc<SExp>],
 ) -> Result<FrontendOutput, CompileErr> {
+    let _t = TTI::new(format!("frontend {:?}", pre_forms[0].loc()));
     let mut includes = Vec::new();
 
     if let Some(_dialect) = detect_chialisp_module(pre_forms) {

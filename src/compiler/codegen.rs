@@ -8,8 +8,8 @@ use num_bigint::ToBigInt;
 
 use crate::classic::clvm::__type_compatibility__::{bi_one, bi_zero};
 
-use crate::compiler::clvm::{run, truthy};
-use crate::compiler::compiler::{compile_from_compileform, is_at_capture};
+use crate::compiler::clvm::{run, truthy, sha256tree};
+use crate::compiler::compiler::{compile_from_compileform, is_at_capture, TTI};
 use crate::compiler::comptypes::{
     fold_m, join_vecs_to_string, list_to_cons, Binding, BindingPattern, BodyForm, CallSpec,
     Callable, CompileErr, CompileForm, CompiledCode, CompilerOpts, CompilerOutput, ConstantKind,
@@ -18,7 +18,7 @@ use crate::compiler::comptypes::{
 };
 use crate::compiler::debug::{build_swap_table_mut, relabel};
 use crate::compiler::evaluate::{Evaluator, EVAL_STACK_LIMIT};
-use crate::compiler::frontend::{compile_bodyform, make_provides_set};
+use crate::compiler::frontend::{compile_bodyform, make_provides_set, collect_used_names_helperform};
 use crate::compiler::gensym::gensym;
 use crate::compiler::inline::{replace_in_inline, synthesize_args};
 use crate::compiler::lambda::lambda_codegen;
@@ -991,6 +991,28 @@ fn fail_if_present<T, R>(
     }
 }
 
+fn get_depended_on_forms(
+    compiler: &PrimaryCodegen,
+    loc: Srcloc,
+    used: &[Vec<u8>],
+) -> Rc<SExp> {
+    let mut t = TTI::new("get_depended_on_forms".to_string());
+    let mut result = SExp::Nil(loc.clone());
+    for name in used.iter() {
+        t.ttyell(&format!("depend on {}", decode_string(name)));
+        if let Some(c) = compiler.constants.get(name) {
+            result = SExp::Cons(loc.clone(), c.clone(), Rc::new(result));
+        } else if let Some(c) = compiler.tabled_constants.get(name) {
+            result = SExp::Cons(loc.clone(), c.clone(), Rc::new(result));
+        } else if let Some(i) = compiler.inlines.get(name) {
+            result = SExp::Cons(loc.clone(), i.to_sexp(), Rc::new(result));
+        } else if let Some(d) = compiler.defuns.get(name) {
+            result = SExp::Cons(loc.clone(), Rc::new(SExp::Cons(loc.clone(), d.required_env.clone(), compiler.env.clone())), Rc::new(result));
+        }
+    }
+    Rc::new(result)
+}
+
 fn codegen_(
     context: &mut BasicCompileContext,
     opts: Rc<dyn CompilerOpts>,
@@ -1013,6 +1035,33 @@ fn codegen_(
                 ))
             } else {
                 let env: &SExp = compiler.env.borrow();
+                let mut hash = None;
+
+                if let Some(fc) = &mut context.funcache {
+                    let mut depends_on_set = HashSet::new();
+                    fc.dependency_graph.get_full_depends_on(&mut depends_on_set, h.name());
+                    let mut depends_on: Vec<_> = depends_on_set.into_iter().collect();
+                    depends_on.sort();
+                    // Collect depended on function forms
+                    let mut depended_on = get_depended_on_forms(&compiler, h.loc(), &depends_on);
+                    let hashable = Rc::new(SExp::Cons(h.loc(), h.to_sexp(), depended_on));
+                    let the_hash = sha256tree(hashable);
+                    hash = Some(the_hash.clone());
+                    if let Some(code) = context.funcache.as_ref().and_then(|c| c.function_outputs.get(&the_hash).cloned()) {
+                        return Ok(compiler.add_defun(
+                            &defun.name,
+                            defun.orig_args.clone(),
+                            DefunCall {
+                                required_env: defun.args.clone(),
+                                code: code.clone(),
+                            },
+                            true, // Always take left env for now
+                        ));
+                    }
+                }
+
+                let t = TTI::new(format!("compile function {}", decode_string(h.name())));
+
                 let updated_opts = opts
                     .set_code_generator(compiler.clone())
                     .set_in_defun(true)
@@ -1076,6 +1125,10 @@ fn codegen_(
                     fail_if_present(defun.loc.clone(), &compiler.defuns, &defun.name, code)?
                 };
 
+                if let (Some(fc), Some(hash)) = (&mut context.funcache, hash) {
+                    fc.function_outputs.insert(hash, code.clone());
+                }
+
                 Ok(compiler.add_defun(
                     &defun.name,
                     defun.orig_args.clone(),
@@ -1123,12 +1176,15 @@ pub fn empty_compiler(prim_map: Rc<HashMap<Vec<u8>, Rc<SExp>>>, l: Srcloc) -> Pr
     }
 }
 
-pub fn should_inline_let(inline_hint: &Option<LetFormInlineHint>) -> bool {
-    matches!(inline_hint, None | Some(LetFormInlineHint::Inline(_)))
+pub fn should_inline_let(opts: Rc<dyn CompilerOpts>, inline_hint: &Option<LetFormInlineHint>) -> bool {
+    let match_none = opts.module_phase().is_none();
+    let want_inline = matches!(inline_hint, Some(LetFormInlineHint::Inline(_)));
+    want_inline || (match_none && inline_hint.is_none())
 }
 
 #[allow(clippy::too_many_arguments)]
 fn generate_let_defun(
+    opts: Rc<dyn CompilerOpts>,
     l: Srcloc,
     kwl: Option<Srcloc>,
     name: &[u8],
@@ -1163,7 +1219,7 @@ fn generate_let_defun(
         // Some forms will be inlined and some as separate functions based on
         // binary size, when permitted.  Sometimes the user will signal a
         // preference.
-        should_inline_let(inline_hint),
+        should_inline_let(opts, inline_hint),
         Box::new(DefunData {
             loc: l.clone(),
             nl: l,
@@ -1327,6 +1383,7 @@ pub fn hoist_assign_form(letdata: &LetData) -> Result<BodyForm, CompileErr> {
 /// We add result here in case something needs extra processing, such as assign
 /// form sorting, which can fail if a workable order can't be solved.
 pub fn hoist_body_let_binding(
+    opts: Rc<dyn CompilerOpts>,
     outer_context: Option<Rc<SExp>>,
     args: Rc<SExp>,
     body: Rc<BodyForm>,
@@ -1355,6 +1412,7 @@ pub fn hoist_body_let_binding(
             };
 
             hoist_body_let_binding(
+                opts.clone(),
                 outer_context,
                 args,
                 Rc::new(BodyForm::Let(
@@ -1374,7 +1432,7 @@ pub fn hoist_body_let_binding(
             let mut revised_bindings = Vec::new();
             for b in letdata.bindings.iter() {
                 let (mut new_helpers, new_binding) =
-                    hoist_body_let_binding(outer_context.clone(), args.clone(), b.body.clone())?;
+                    hoist_body_let_binding(opts.clone(), outer_context.clone(), args.clone(), b.body.clone())?;
                 out_defuns.append(&mut new_helpers);
                 revised_bindings.push(Rc::new(Binding {
                     loc: b.loc.clone(),
@@ -1384,6 +1442,7 @@ pub fn hoist_body_let_binding(
                 }));
             }
             let generated_defun = generate_let_defun(
+                opts,
                 letdata.loc.clone(),
                 None,
                 &defun_name,
@@ -1425,14 +1484,14 @@ pub fn hoist_body_let_binding(
         }
         // New alternative for assign forms.
         BodyForm::Let(LetFormKind::Assign, letdata) => {
-            hoist_body_let_binding(outer_context, args, Rc::new(hoist_assign_form(letdata)?))
+            hoist_body_let_binding(opts.clone(), outer_context, args, Rc::new(hoist_assign_form(letdata)?))
         }
         BodyForm::Call(l, list, tail) => {
             let mut vres = Vec::new();
             let mut new_call_list = vec![list[0].clone()];
             for i in list.iter().skip(1) {
                 let (mut new_helpers, new_arg) =
-                    hoist_body_let_binding(outer_context.clone(), args.clone(), i.clone())?;
+                    hoist_body_let_binding(opts.clone(), outer_context.clone(), args.clone(), i.clone())?;
                 new_call_list.push(new_arg);
                 vres.append(&mut new_helpers);
             }
@@ -1440,7 +1499,7 @@ pub fn hoist_body_let_binding(
             // Ensure that we hoist a let occupying the &rest tail.
             let new_tail = if let Some(t) = tail.as_ref() {
                 let (mut new_tail_helpers, new_tail) =
-                    hoist_body_let_binding(outer_context, args, t.clone())?;
+                    hoist_body_let_binding(opts.clone(), outer_context, args, t.clone())?;
                 vres.append(&mut new_tail_helpers);
                 Some(new_tail)
             } else {
@@ -1469,6 +1528,7 @@ pub fn hoist_body_let_binding(
             ));
             let new_function_name = gensym(b"lambda".to_vec());
             let (mut new_helpers_from_body, new_body) = hoist_body_let_binding(
+                opts.clone(),
                 Some(new_function_args.clone()),
                 new_function_args.clone(),
                 letdata.body.clone(),
@@ -1502,7 +1562,7 @@ pub fn hoist_body_let_binding(
 /// that program.  This expands and re-processes the helper set until all
 /// desugarable body forms have been transformed to a state where no more
 /// desugaring is needed.
-pub fn process_helper_let_bindings(helpers: &[HelperForm]) -> Result<Vec<HelperForm>, CompileErr> {
+pub fn process_helper_let_bindings(opts: Rc<dyn CompilerOpts>, helpers: &[HelperForm]) -> Result<Vec<HelperForm>, CompileErr> {
     let mut result = helpers.to_owned();
     let mut i = 0;
 
@@ -1515,7 +1575,7 @@ pub fn process_helper_let_bindings(helpers: &[HelperForm]) -> Result<Vec<HelperF
                     None
                 };
                 let helper_result =
-                    hoist_body_let_binding(context, defun.args.clone(), defun.body.clone())?;
+                    hoist_body_let_binding(opts.clone(), context, defun.args.clone(), defun.body.clone())?;
                 let hoisted_helpers = helper_result.0;
                 let hoisted_body = helper_result.1.clone();
 
@@ -1550,6 +1610,7 @@ fn find_easiest_constant(
     constant_set: &HashSet<Vec<u8>>,
     constants: &[HelperForm],
 ) -> Option<HelperForm> {
+    let _t = TTI::new("find_easiest_constant".to_string());
     let constants_in_set: Vec<HelperForm> = constants
         .iter()
         .filter(|c| constant_set.contains(c.name()))
@@ -1616,6 +1677,7 @@ fn decide_constant_generation_order(
     _compiler: &PrimaryCodegen,
     helpers: &[HelperForm],
 ) -> Result<Vec<HelperForm>, CompileErr> {
+    let _t = TTI::new("decide_constant_generation_order".to_string());
     let mut exp = Rc::new(BodyForm::Quoted(SExp::Nil(loc.clone())));
 
     for h in helpers.iter() {
@@ -2080,6 +2142,7 @@ fn final_codegen(
     opts: Rc<dyn CompilerOpts>,
     compiler: &PrimaryCodegen,
 ) -> Result<PrimaryCodegen, CompileErr> {
+    let _t = TTI::new("final_codegen".to_string());
     let opt_final_expr = context.pre_final_codegen_optimize(opts.clone(), compiler)?;
 
     let optimizer_opts = opts.clone();
@@ -2324,6 +2387,8 @@ pub fn codegen(
     opts: Rc<dyn CompilerOpts>,
     cmod: &CompileForm,
 ) -> Result<SExp, CompileErr> {
+    let _t = TTI::new("codegen".to_string());
+
     let mut start_of_codegen_optimization = StartOfCodegenOptimization {
         program: cmod.clone(),
         code_generator: dummy_functions(&start_codegen(context, opts.clone(), cmod.clone())?)?,
@@ -2388,6 +2453,7 @@ pub fn codegen(
         code_generator.module_phase,
         Some(ModulePhase::CommonPhase(true))
     ) {
+        let _t = TTI::new("final_codegen - common phase".to_string());
         // We've got an order for generation that will allow us to have correct
         // constant order.  At this point we know that the constant order is
         // resolvable and doesn't have direct cycles.  It may be the case that
