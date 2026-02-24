@@ -27,6 +27,7 @@ fn shrink_expr_from_string(s: String) -> Result<String, CompileErr> {
         runner: runner.clone(),
         symbols: HashMap::new(),
         optimizer: get_optimizer(&loc, opts.clone()).unwrap(),
+        funcache: None,
     };
     let result = parse_sexp(loc.clone(), s.bytes())
         .err_into()

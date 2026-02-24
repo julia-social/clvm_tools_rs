@@ -5,7 +5,7 @@ use std::borrow::Borrow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::io;
-use std::io::Write;
+// use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -118,10 +118,10 @@ lazy_static! {
 }
 
 pub struct TTI {
-    ct: SystemTime,
-    nm: String,
-    id: String,
-    sv: Vec<String>,
+    pub ct: SystemTime,
+    pub nm: String,
+    pub id: String,
+    pub sv: Vec<String>,
 }
 
 impl TTI {
@@ -140,15 +140,15 @@ impl TTI {
 
         let mut t = TTI {
             nm: name,
-            id: id,
+            id,
             ct: SystemTime::now(),
-            sv: vec![]
+            sv: vec![],
         };
         t.ttyell("start");
         t
     }
 
-    pub fn ttyell(&mut self, t: &str) {
+    pub fn ttyell(&mut self, _t: &str) {
         /*
         if let Ok(mut file) = fs::OpenOptions::new()
             .write(true)
@@ -192,9 +192,17 @@ pub fn desugar_frontend(
     do_desugar(opts.clone(), &p1)
 }
 
-pub fn do_desugar(opts: Rc<dyn CompilerOpts>, program: &CompileForm) -> Result<CompileForm, CompileErr> {
+pub fn do_desugar(
+    opts: Rc<dyn CompilerOpts>,
+    program: &CompileForm,
+) -> Result<CompileForm, CompileErr> {
     // Transform let bindings, merging nested let scopes with the top namespace
-    let hoisted_bindings = hoist_body_let_binding(opts.clone(), None, program.args.clone(), program.exp.clone())?;
+    let hoisted_bindings = hoist_body_let_binding(
+        opts.clone(),
+        None,
+        program.args.clone(),
+        program.exp.clone(),
+    )?;
     let mut new_helpers = hoisted_bindings.0;
     let expr = hoisted_bindings.1; // expr is the let-hoisted program
 
@@ -720,12 +728,10 @@ pub fn try_from_cache(
     let mut summary = Rc::new(SExp::Nil(cf.loc.clone()));
     let mut data_to_write = Vec::new();
 
-    let mut t = TTI::new(format!("try_from_cache {}", opts.filename()));
+    let _t = TTI::new(format!("try_from_cache {}", opts.filename()));
 
     for e in exports.iter() {
-        let hex_file_name = {
-            get_hex_name_of_export(opts.clone(), &cf.loc(), e)
-        }?;
+        let hex_file_name = { get_hex_name_of_export(opts.clone(), &cf.loc(), e) }?;
         let hex_data = {
             if let Some(hd) = try_element_from_cache(opts.clone(), cf, &hex_file_name) {
                 hd
@@ -735,9 +741,8 @@ pub fn try_from_cache(
             }
         };
 
-        let loaded_hex_data = {
-            hex_to_modern_sexp(&mut allocator, &HashMap::new(), cf.loc.clone(), &hex_data)
-        }?;
+        let loaded_hex_data =
+            { hex_to_modern_sexp(&mut allocator, &HashMap::new(), cf.loc.clone(), &hex_data) }?;
         data_to_write.push((hex_file_name.clone(), hex_data.clone()));
 
         let shortname = if let Export::Function(desc) = e {

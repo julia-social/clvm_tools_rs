@@ -18,7 +18,6 @@ use crate::classic::clvm_tools::stages::stage_0::TRunProgram;
 
 use crate::compiler::clvm;
 use crate::compiler::clvm::{convert_from_clvm_rs, run_step, RunStep};
-use crate::compiler::compiler::TTI;
 use crate::compiler::runtypes::RunFailure;
 use crate::compiler::sexp::SExp;
 use crate::compiler::srcloc::Srcloc;

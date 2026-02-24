@@ -3,11 +3,12 @@ use std::rc::Rc;
 
 use crate::compiler::codegen::codegen;
 use crate::compiler::compiler::TTI;
-use crate::compiler::comptypes::ModulePhase;
 use crate::compiler::optimize::depgraph::{DepgraphKind, FunctionDependencyGraph};
 use crate::compiler::optimize::{sexp_scale, SyntheticType};
 use crate::compiler::sexp::decode_string;
-use crate::compiler::{BasicCompileContext, CompileErr, CompileForm, CompilerOpts, HelperForm, Funcache};
+use crate::compiler::{
+    BasicCompileContext, CompileErr, CompileForm, CompilerOpts, Funcache, HelperForm,
+};
 
 // Find the roots for the given function.
 fn find_roots(
@@ -62,7 +63,7 @@ pub fn deinline_opt(
     if context.funcache.is_none() {
         context.funcache = Some(Funcache {
             function_outputs: HashMap::new(),
-            dependency_graph: FunctionDependencyGraph::new(&compileform)
+            dependency_graph: FunctionDependencyGraph::new(&compileform),
         });
     }
 
@@ -77,7 +78,9 @@ pub fn deinline_opt(
             // Since the convention of module programs is non-inline for synthetics, no program
             // in my test set lost weight by switching inline off after losing weight by switching
             // it on, and the cost of this search can be high.
-            if matches!(&defun.synthetic, Some(SyntheticType::NoInlinePreference)) && (!is_module_compile || !*inline) {
+            if matches!(&defun.synthetic, Some(SyntheticType::NoInlinePreference))
+                && (!is_module_compile || !*inline)
+            {
                 *h = HelperForm::Defun(!*inline, defun.clone());
                 return true;
             }
@@ -146,7 +149,7 @@ pub fn deinline_opt(
         let mut leaf_roots = BTreeSet::new();
         {
             let depgraph = &context.funcache.as_ref().unwrap().dependency_graph;
-            find_roots(&mut visited, &mut leaf_roots, &depgraph, l);
+            find_roots(&mut visited, &mut leaf_roots, depgraph, l);
         }
         if leaf_roots.is_empty() {
             leaf_roots.insert(l.to_vec());
@@ -237,7 +240,11 @@ pub fn deinline_opt(
     }
 
     let mut t = TTI::new("deinline_opt".to_string());
-    t.ttyell(&format!("{} stepping over 24 {} {cfsexp}", opts.filename(), stepping_over_24(opts.clone())));
+    t.ttyell(&format!(
+        "{} stepping over 24 {} {cfsexp}",
+        opts.filename(),
+        stepping_over_24(opts.clone())
+    ));
 
     for (i, (_, function_set)) in root_set_to_inline_tree_vec.iter().enumerate() {
         let names_vec: Vec<String> = function_set.iter().map(|n| decode_string(n)).collect();
@@ -247,7 +254,10 @@ pub fn deinline_opt(
     let mut count = 0;
 
     for (i, (_, function_set)) in root_set_to_inline_tree_vec.iter().enumerate() {
-        let mut s = TTI::new(format!("deinline_opt function set {} at {} iters", i, count));
+        let mut s = TTI::new(format!(
+            "deinline_opt function set {} at {} iters",
+            i, count
+        ));
 
         loop {
             let start_metric = metric;
@@ -270,11 +280,10 @@ pub fn deinline_opt(
                 }
 
                 count += 1;
-                s.ttyell(&format!("helper {}", decode_string(&old_helper.name())));
+                s.ttyell(&format!("helper {}", decode_string(old_helper.name())));
 
-                let maybe_smaller_program =
-                {
-                    let mut u = TTI::new("codegen".to_string());
+                let maybe_smaller_program = {
+                    let _u = TTI::new("codegen".to_string());
                     codegen(context, opts.clone(), &compileform)
                 }?;
                 let new_metric = sexp_scale(&maybe_smaller_program);
@@ -283,7 +292,10 @@ pub fn deinline_opt(
                 if new_metric >= metric {
                     compileform.helpers[i] = old_helper;
                 } else {
-                    s.ttyell(&format!("metric {new_metric} better than {metric} for {}", compileform.helpers[i].to_sexp()));
+                    s.ttyell(&format!(
+                        "metric {new_metric} better than {metric} for {}",
+                        compileform.helpers[i].to_sexp()
+                    ));
                     metric = new_metric;
                     best_compileform = compileform.clone();
                 }
@@ -295,6 +307,11 @@ pub fn deinline_opt(
         }
     }
 
-    t.ttyell(&format!("{} iters ... done in {} {} {cfsexp}", count, opts.filename(), stepping_over_24(opts.clone())));
+    t.ttyell(&format!(
+        "{} iters ... done in {} {} {cfsexp}",
+        count,
+        opts.filename(),
+        stepping_over_24(opts.clone())
+    ));
     Ok(best_compileform)
 }

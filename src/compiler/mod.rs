@@ -45,8 +45,8 @@ use crate::classic::clvm_tools::stages::stage_0::TRunProgram;
 use crate::compiler::comptypes::{
     BodyForm, CompileErr, CompileForm, CompilerOpts, DefunData, HelperForm, PrimaryCodegen,
 };
-use crate::compiler::optimize::Optimization;
 use crate::compiler::optimize::depgraph::FunctionDependencyGraph;
+use crate::compiler::optimize::Optimization;
 use crate::compiler::sexp::SExp;
 
 pub struct Funcache {

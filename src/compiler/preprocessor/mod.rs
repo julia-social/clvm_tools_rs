@@ -15,7 +15,7 @@ use crate::classic::clvm_tools::stages::stage_0::{DefaultProgramRunner, TRunProg
 use crate::compiler::cldb::hex_to_modern_sexp;
 use crate::compiler::clvm;
 use crate::compiler::clvm::{convert_from_clvm_rs, sha256tree, sha256tree_from_atom, truthy};
-use crate::compiler::compiler::{compile_from_compileform, compile_pre_forms, TTI};
+use crate::compiler::compiler::{compile_from_compileform, compile_pre_forms};
 use crate::compiler::comptypes::{
     BodyForm, CompileErr, CompileForm, CompilerOpts, CompilerOutput, ConstantKind, DefconstData,
     HelperForm, ImportLongName, IncludeDesc, IncludeProcessType, LongNameTranslation,
@@ -1284,9 +1284,17 @@ impl Preprocessor {
         unexpanded_body: Rc<SExp>,
     ) -> Result<Vec<Rc<SExp>>, CompileErr> {
         // let _t = TTI::new(format!("process pp form {}", unexpanded_body));
-        let body = self
-            .expand_macros(unexpanded_body.clone())?
-            .unwrap_or_else(|| unexpanded_body.clone());
+        let mut body = unexpanded_body.clone();
+
+        loop {
+            let new_body = self.expand_macros(body.clone())?;
+            // Keep expanding until we run out of expansions.
+            if let Some(new_body) = new_body {
+                body = new_body;
+            } else {
+                break;
+            }
+        }
 
         // Support using the preprocessor to collect dependencies recursively.
         let as_list: Option<Vec<SExp>> = body

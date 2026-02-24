@@ -32,6 +32,7 @@ where
         runner: runner.clone(),
         symbols: HashMap::new(),
         optimizer: get_optimizer(&Srcloc::start("*test*"), opts.clone()).unwrap(),
+        funcache: None,
     };
     for i in inputs.iter() {
         res = res.and_then(|_| repl.process_line(&mut context, i.to_string()));

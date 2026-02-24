@@ -2432,6 +2432,7 @@ fn test_handle_explicit_empty_atom() {
         runner: runner.clone(),
         symbols: HashMap::new(),
         optimizer: get_optimizer(&program.loc(), opts.clone()).unwrap(),
+        funcache: None,
     };
     let compiled = opts
         .compile_program(&mut context, program)
@@ -2520,6 +2521,7 @@ fn test_exhaustive_chars() {
                 runner: runner.clone(),
                 symbols: HashMap::new(),
                 optimizer: get_optimizer(&sub_qe.loc(), opts.clone()).unwrap(),
+                funcache: None,
             };
             let compiled = opts
                 .compile_program(&mut context, make_test_program(sub_qe))

@@ -131,6 +131,7 @@ fn test_cse_merge_regression() {
             runner: runner.clone(),
             symbols: HashMap::new(),
             optimizer: get_optimizer(&program_sexp.loc(), new_opts.clone()).unwrap(),
+            funcache: None,
         };
         let new_compiled = new_opts
             .compile_program(&mut new_context, program_sexp.clone())
@@ -140,6 +141,7 @@ fn test_cse_merge_regression() {
             runner: runner.clone(),
             symbols: HashMap::new(),
             optimizer: get_optimizer(&program_sexp.loc(), old_opts.clone()).unwrap(),
+            funcache: None,
         };
         let old_compiled = old_opts
             .compile_program(&mut old_context, program_sexp)

@@ -4,13 +4,12 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 use crate::classic::clvm::__type_compatibility__::bi_one;
-use crate::compiler::compiler::TTI;
 use crate::compiler::comptypes::{
     list_to_cons, match_as_named, ArgsAndTail, Binding, BindingPattern, BodyForm, CompileErr,
     CompileForm, CompilerOpts, ConstantKind, DefconstData, DefmacData, DefunData, Export,
     ExportProgramDesc, FrontendOutput, HelperForm, ImportLongName, IncludeDesc, LetData,
-    LetFormInlineHint, LetFormKind, LongNameTranslation, ModAccum, ModuleImportSpec, NamespaceData,
-    NamespaceRefData,
+    LetFormInlineHint, LetFormKind, LongNameTranslation, ModAccum, ModuleImportSpec,
+    NamespaceData, NamespaceRefData,
 };
 use crate::compiler::lambda::handle_lambda;
 use crate::compiler::preprocessor::{
@@ -838,6 +837,14 @@ pub fn compile_helperform(
     opts: Rc<dyn CompilerOpts>,
     body: Rc<SExp>,
 ) -> Result<Option<HelperFormResult>, CompileErr> {
+    compile_helperform_mm(opts, body, false)
+}
+
+pub fn compile_helperform_mm(
+    opts: Rc<dyn CompilerOpts>,
+    body: Rc<SExp>,
+    modules: bool,
+) -> Result<Option<HelperFormResult>, CompileErr> {
     let l = location_span(body.loc(), body.clone());
     let plist = body.proper_list();
 
@@ -869,7 +876,7 @@ pub fn compile_helperform(
                 new_helpers: vec![definition],
             }))
         } else if matched.op_name == b"defmacro" || is_defmac {
-            if is_defmac {
+            if is_defmac && modules {
                 return Ok(Some(HelperFormResult {
                     new_helpers: vec![],
                 }));
@@ -1096,7 +1103,7 @@ pub fn frontend(
         for form in output_forms.forms.iter() {
             if let Some(export) = match_export_form(opts.clone(), form.clone())? {
                 exports.push(export);
-            } else if let Some(helper) = compile_helperform(opts.clone(), form.clone())? {
+            } else if let Some(helper) = compile_helperform_mm(opts.clone(), form.clone(), true)? {
                 for h in helper.new_helpers.iter() {
                     other_forms.push(h.clone());
                 }

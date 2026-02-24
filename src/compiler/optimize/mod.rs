@@ -24,7 +24,6 @@ use crate::classic::clvm::__type_compatibility__::bi_zero;
 use crate::classic::clvm_tools::stages::stage_0::TRunProgram;
 use crate::classic::clvm_tools::stages::stage_2::optimize::optimize_sexp;
 
-use crate::compiler::BasicCompileContext;
 use crate::compiler::clvm::{convert_from_clvm_rs, convert_to_clvm_rs, run};
 use crate::compiler::codegen::{codegen, do_mod_codegen, get_callable};
 use crate::compiler::comptypes::{
@@ -43,6 +42,7 @@ use crate::compiler::runtypes::RunFailure;
 use crate::compiler::sexp::parse_sexp;
 use crate::compiler::sexp::{AtomValue, NodeSel, SExp, SelectNode, ThisNode};
 use crate::compiler::srcloc::Srcloc;
+use crate::compiler::BasicCompileContext;
 use crate::compiler::CompileContextWrapper;
 use crate::compiler::StartOfCodegenOptimization;
 use crate::util::u8_from_number;
