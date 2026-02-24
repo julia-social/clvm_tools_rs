@@ -57,8 +57,13 @@ jobs:
         echo generated hex files
         find clsp -name \*.hex
         echo end hex files
+        rm -rf build.rs
 
     - name: Run chia-gaming chialisp tests
       run: |
         cd chia-gaming
+        # XXX don't delete the hex files here as we just rebuilt everything.
+        # XXX somehow cargo test doesn't regenerate the hex files either, so that's likely a bug?
+        mv tools/run-clsp-tests.sh tools/run-clsp-tests.no
+        grep -v 'xargs rm' ./tools/run-clsp-tests.no > ./tools/run-clsp-tests.sh
         ./tools/run-clsp-tests.sh
