@@ -991,26 +991,50 @@ fn fail_if_present<T, R>(
     }
 }
 
+fn filter_env(
+    used: &[Vec<u8>],
+    nil: Rc<SExp>,
+    env: Rc<SExp>
+) -> Rc<SExp> {
+    match env.atomize() {
+        SExp::Atom(l, n) => {
+            if used.iter().any(|u| *u != n) {
+                return nil.clone();
+            }
+            env
+        }
+        SExp::Cons(l,a,b) => {
+            let new_a = filter_env(used, nil.clone(), a.clone());
+            let new_b = filter_env(used, nil.clone(), b.clone());
+            let old_a_ptr = &*a;
+            let old_b_ptr = &*b;
+            let new_a_ptr = &*new_a;
+            let new_b_ptr = &*new_b;
+            if old_a_ptr == new_a_ptr && old_b_ptr == new_b_ptr {
+                return env;
+            }
+            Rc::new(SExp::Cons(l.clone(), new_a, new_b))
+        }
+        _ => env
+    }
+}
+
 fn get_depended_on_forms(
     compiler: &PrimaryCodegen,
     loc: Srcloc,
+    mut result: Rc<SExp>,
     used: &[Vec<u8>],
 ) -> Rc<SExp> {
-    let mut t = TTI::new("get_depended_on_forms".to_string());
-    let mut result = SExp::Nil(loc.clone());
     for name in used.iter() {
-        t.ttyell(&format!("depend on {}", decode_string(name)));
         if let Some(c) = compiler.constants.get(name) {
-            result = SExp::Cons(loc.clone(), c.clone(), Rc::new(result));
+            result = Rc::new(SExp::Cons(loc.clone(), c.clone(), result));
         } else if let Some(c) = compiler.tabled_constants.get(name) {
-            result = SExp::Cons(loc.clone(), c.clone(), Rc::new(result));
+            result = Rc::new(SExp::Cons(loc.clone(), c.clone(), result));
         } else if let Some(i) = compiler.inlines.get(name) {
-            result = SExp::Cons(loc.clone(), i.to_sexp(), Rc::new(result));
-        } else if let Some(d) = compiler.defuns.get(name) {
-            result = SExp::Cons(loc.clone(), Rc::new(SExp::Cons(loc.clone(), d.required_env.clone(), compiler.env.clone())), Rc::new(result));
+            result = Rc::new(SExp::Cons(loc.clone(), i.to_sexp(), result));
         }
     }
-    Rc::new(result)
+    result
 }
 
 fn codegen_(
@@ -1020,6 +1044,7 @@ fn codegen_(
     h: &HelperForm,
     allow_redef: bool,
 ) -> Result<PrimaryCodegen, CompileErr> {
+    let mut t = TTI::new(format!("codegen_ {}", decode_string(h.name())));
     match &h {
         HelperForm::Defun(inline, defun) => {
             if *inline {
@@ -1043,11 +1068,17 @@ fn codegen_(
                     let mut depends_on: Vec<_> = depends_on_set.into_iter().collect();
                     depends_on.sort();
                     // Collect depended on function forms
-                    let mut depended_on = get_depended_on_forms(&compiler, h.loc(), &depends_on);
+                    let filtered_env = filter_env(
+                        &depends_on,
+                        Rc::new(SExp::Nil(h.loc())),
+                        compiler.env.clone()
+                    );
+                    let mut depended_on = get_depended_on_forms(&compiler, h.loc(), filtered_env.clone(), &depends_on);
                     let hashable = Rc::new(SExp::Cons(h.loc(), h.to_sexp(), depended_on));
                     let the_hash = sha256tree(hashable);
                     hash = Some(the_hash.clone());
                     if let Some(code) = context.funcache.as_ref().and_then(|c| c.function_outputs.get(&the_hash).cloned()) {
+                        t.ttyell(&format!("cache hit {} {}", decode_string(h.name()), filtered_env));
                         return Ok(compiler.add_defun(
                             &defun.name,
                             defun.orig_args.clone(),
@@ -1057,10 +1088,10 @@ fn codegen_(
                             },
                             true, // Always take left env for now
                         ));
+                    } else {
+                        t.ttyell(&format!("cache miss {} {}", decode_string(h.name()), filtered_env));
                     }
                 }
-
-                let t = TTI::new(format!("compile function {}", decode_string(h.name())));
 
                 let updated_opts = opts
                     .set_code_generator(compiler.clone())
@@ -1309,6 +1340,7 @@ pub fn toposort_assign_bindings(
 /// In the future, things such as lambdas will also desugar along these same
 /// routes.
 pub fn hoist_assign_form(letdata: &LetData) -> Result<BodyForm, CompileErr> {
+    let mut t = TTI::new(format!("hoist_assign_form {}", letdata.loc.clone()));
     let sorted_spec = toposort_assign_bindings(&letdata.loc, &letdata.bindings)?;
 
     // Break up into stages of parallel let forms.
@@ -1610,7 +1642,7 @@ fn find_easiest_constant(
     constant_set: &HashSet<Vec<u8>>,
     constants: &[HelperForm],
 ) -> Option<HelperForm> {
-    let _t = TTI::new("find_easiest_constant".to_string());
+    // let _t = TTI::new("find_easiest_constant".to_string());
     let constants_in_set: Vec<HelperForm> = constants
         .iter()
         .filter(|c| constant_set.contains(c.name()))
@@ -1677,7 +1709,7 @@ fn decide_constant_generation_order(
     _compiler: &PrimaryCodegen,
     helpers: &[HelperForm],
 ) -> Result<Vec<HelperForm>, CompileErr> {
-    let _t = TTI::new("decide_constant_generation_order".to_string());
+    // let _t = TTI::new("decide_constant_generation_order".to_string());
     let mut exp = Rc::new(BodyForm::Quoted(SExp::Nil(loc.clone())));
 
     for h in helpers.iter() {
@@ -2142,7 +2174,7 @@ fn final_codegen(
     opts: Rc<dyn CompilerOpts>,
     compiler: &PrimaryCodegen,
 ) -> Result<PrimaryCodegen, CompileErr> {
-    let _t = TTI::new("final_codegen".to_string());
+    // let _t = TTI::new("final_codegen".to_string());
     let opt_final_expr = context.pre_final_codegen_optimize(opts.clone(), compiler)?;
 
     let optimizer_opts = opts.clone();
@@ -2387,7 +2419,7 @@ pub fn codegen(
     opts: Rc<dyn CompilerOpts>,
     cmod: &CompileForm,
 ) -> Result<SExp, CompileErr> {
-    let _t = TTI::new("codegen".to_string());
+    // let _t = TTI::new(format!("codegen {}", cmod.loc()));
 
     let mut start_of_codegen_optimization = StartOfCodegenOptimization {
         program: cmod.clone(),
@@ -2453,7 +2485,7 @@ pub fn codegen(
         code_generator.module_phase,
         Some(ModulePhase::CommonPhase(true))
     ) {
-        let _t = TTI::new("final_codegen - common phase".to_string());
+        // let _t = TTI::new("final_codegen - common phase".to_string());
         // We've got an order for generation that will allow us to have correct
         // constant order.  At this point we know that the constant order is
         // resolvable and doesn't have direct cycles.  It may be the case that

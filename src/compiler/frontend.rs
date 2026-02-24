@@ -1076,7 +1076,7 @@ pub fn frontend(
     opts: Rc<dyn CompilerOpts>,
     pre_forms: &[Rc<SExp>],
 ) -> Result<FrontendOutput, CompileErr> {
-    let _t = TTI::new(format!("frontend {:?}", pre_forms[0].loc()));
+    // let _t = TTI::new(format!("frontend {:?}", pre_forms[0].loc()));
     let mut includes = Vec::new();
 
     if let Some(_dialect) = detect_chialisp_module(pre_forms) {

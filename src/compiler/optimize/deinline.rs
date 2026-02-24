@@ -41,7 +41,7 @@ fn stepping_over_24(opts: Rc<dyn CompilerOpts>) -> bool {
     if let Some(s) = &opts.dialect().stepping {
         return *s > 24;
     }
-    false
+    opts.module_phase().is_some()
 }
 
 type VecOfRootSetTree<'a> = Vec<(&'a BTreeSet<Vec<u8>>, Vec<&'a Vec<u8>>)>;
@@ -58,8 +58,6 @@ pub fn deinline_opt(
     }
 
     let cfsexp = compileform.to_sexp();
-    let mut t = TTI::new("deinline_opt".to_string());
-    t.ttyell(&format!("{} stepping over 24 {} {cfsexp}", opts.filename(), stepping_over_24(opts.clone())));
 
     if context.funcache.is_none() {
         context.funcache = Some(Funcache {
@@ -69,6 +67,7 @@ pub fn deinline_opt(
     }
 
     let mut best_compileform = compileform.clone();
+
     let generated_program = codegen(context, opts.clone(), &best_compileform)?;
     let mut metric = sexp_scale(&generated_program);
     let is_module_compile = opts.module_phase().is_some();
@@ -237,6 +236,9 @@ pub fn deinline_opt(
         root_set_to_inline_tree_vec.sort();
     }
 
+    let mut t = TTI::new("deinline_opt".to_string());
+    t.ttyell(&format!("{} stepping over 24 {} {cfsexp}", opts.filename(), stepping_over_24(opts.clone())));
+
     for (i, (_, function_set)) in root_set_to_inline_tree_vec.iter().enumerate() {
         let names_vec: Vec<String> = function_set.iter().map(|n| decode_string(n)).collect();
         t.ttyell(&format!("functions set {i}: {names_vec:?}"));
@@ -270,7 +272,11 @@ pub fn deinline_opt(
                 count += 1;
                 s.ttyell(&format!("helper {}", decode_string(&old_helper.name())));
 
-                let maybe_smaller_program = codegen(context, opts.clone(), &compileform)?;
+                let maybe_smaller_program =
+                {
+                    let mut u = TTI::new("codegen".to_string());
+                    codegen(context, opts.clone(), &compileform)
+                }?;
                 let new_metric = sexp_scale(&maybe_smaller_program);
 
                 // Don't keep this change if it made things worse.

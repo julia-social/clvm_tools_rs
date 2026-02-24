@@ -149,6 +149,7 @@ impl TTI {
     }
 
     pub fn ttyell(&mut self, t: &str) {
+        /*
         if let Ok(mut file) = fs::OpenOptions::new()
             .write(true)
             .append(true)
@@ -158,6 +159,7 @@ impl TTI {
             let dt: chrono::DateTime<chrono::Utc> = ct.into();
             writeln!(file, "{}{}{} {}", dt.format("%Y-%m-%d %H:%M:%S"), self.id, self.nm, t).ok();
         }
+        */
     }
 }
 
@@ -213,8 +215,8 @@ pub fn finish_compilation(
     opts: Rc<dyn CompilerOpts>,
     p2: CompileForm,
 ) -> Result<SExp, CompileErr> {
-    let mut t = TTI::new(format!("finish_compilation {}", opts.filename()));
-    t.ttyell(&p2.to_sexp().to_string());
+    // let mut t = TTI::new(format!("finish_compilation {}", opts.filename()));
+    // t.ttyell(&p2.to_sexp().to_string());
 
     let p3 = context.post_desugar_optimization(opts.clone(), p2)?;
 
@@ -231,8 +233,8 @@ pub fn compile_from_compileform(
     opts: Rc<dyn CompilerOpts>,
     p0: CompileForm,
 ) -> Result<SExp, CompileErr> {
-    let mut t = TTI::new(format!("compile_from_compileform {}", opts.filename()));
-    t.ttyell(&p0.to_sexp().to_string());
+    // let mut t = TTI::new(format!("compile_from_compileform {}", opts.filename()));
+    // t.ttyell(&p0.to_sexp().to_string());
     let p1 = context.frontend_optimization(opts.clone(), p0)?;
 
     // Resolve includes, convert program source to lexemes
@@ -722,21 +724,18 @@ pub fn try_from_cache(
 
     for e in exports.iter() {
         let hex_file_name = {
-            let _t = TTI::new("get_hex_name_of_import".to_string());
             get_hex_name_of_export(opts.clone(), &cf.loc(), e)
         }?;
         let hex_data = {
-            let _t = TTI::new(format!("try_element_from_cache {hex_file_name}"));
             if let Some(hd) = try_element_from_cache(opts.clone(), cf, &hex_file_name) {
                 hd
             } else {
-                t.ttyell(&format!("missing cache element {hex_file_name}"));
+                // t.ttyell(&format!("missing cache element {hex_file_name}"));
                 return Ok(None);
             }
         };
 
         let loaded_hex_data = {
-            let _t = TTI::new(format!("hex_to_modern_sexp {hex_file_name}"));
             hex_to_modern_sexp(&mut allocator, &HashMap::new(), cf.loc.clone(), &hex_data)
         }?;
         data_to_write.push((hex_file_name.clone(), hex_data.clone()));
@@ -766,7 +765,7 @@ pub fn try_from_cache(
         });
     }
 
-    t.ttyell(&format!("cache hit {}", opts.filename()));
+    // t.ttyell(&format!("cache hit {}", opts.filename()));
 
     // if we got here, then we loaded all exports.
     // write (or rewrite) any hex files that were outputs of the elided build steps.
@@ -877,11 +876,10 @@ pub fn compile_pre_forms(
             // If we can read from cache, use that.  We'll use the actual form of the compileform
             // and opts (the dialect) to determine a cache hit.
             if let Some(result) = try_from_cache(opts.clone(), &cf, &exports)? {
-                let _t = TTI::new(format!("using cache {:?}", cf.loc()));
                 return Ok(result);
             }
 
-            let _t = TTI::new("compile_pre_forms".to_string());
+            let _t = TTI::new(format!("compile_pre_forms {}", cf.loc()));
             // cl23 always reflects optimization.
             let dialect = opts.dialect();
             let opts = if let Some(stepping) = dialect.stepping.as_ref() {
@@ -932,8 +930,6 @@ pub fn compile_file(
     content: &str,
     symbol_table: &mut HashMap<String, String>,
 ) -> Result<CompilerOutput, CompileErr> {
-    let _t = TTI::new(format!("compile_file {}", opts.filename()));
-
     let _int_conversion_bug = NewStyleIntConversion::new(opts.dialect().int_fix);
     let srcloc = Srcloc::start(&opts.filename());
     let pre_forms = parse_sexp(srcloc.clone(), content.bytes())?;
@@ -1140,7 +1136,6 @@ impl CompilerOpts for DefaultCompilerOpts {
         context: &mut BasicCompileContext,
         sexp: Rc<SExp>,
     ) -> Result<CompilerOutput, CompileErr> {
-        let _t = TTI::new("compile_program".to_string());
         let _int_conversion_bug = NewStyleIntConversion::new(self.dialect.int_fix);
         let me = self.set_module_phase(None);
         compile_pre_forms(context, me, &[sexp])
