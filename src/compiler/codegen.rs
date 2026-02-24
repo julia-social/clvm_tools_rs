@@ -1070,12 +1070,8 @@ fn codegen_(
                         Rc::new(SExp::Nil(h.loc())),
                         compiler.env.clone(),
                     );
-                    let depended_on = get_depended_on_forms(
-                        compiler,
-                        h.loc(),
-                        filtered_env.clone(),
-                        &depends_on,
-                    );
+                    let depended_on =
+                        get_depended_on_forms(compiler, h.loc(), filtered_env.clone(), &depends_on);
                     let hashable = Rc::new(SExp::Cons(h.loc(), h.to_sexp(), depended_on));
                     let the_hash = sha256tree(hashable);
                     hash = Some(the_hash.clone());
