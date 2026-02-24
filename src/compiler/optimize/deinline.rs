@@ -256,7 +256,6 @@ pub fn deinline_opt(
                     continue;
                 }
 
-
                 let maybe_smaller_program = codegen(context, opts.clone(), &compileform)?;
                 let new_metric = sexp_scale(&maybe_smaller_program);
 
