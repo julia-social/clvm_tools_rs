@@ -65,5 +65,6 @@ jobs:
         # XXX don't delete the hex files here as we just rebuilt everything.
         # XXX somehow cargo test doesn't regenerate the hex files either, so that's likely a bug?
         mv tools/run-clsp-tests.sh tools/run-clsp-tests.no
-        grep -v 'xargs rm' ./tools/run-clsp-tests.no > ./tools/run-clsp-tests.sh
-        sh ./tools/run-clsp-tests.sh
+        grep -v 'xargs rm' ./tools/run-clsp-tests.no | grep -v 'cd "$REPO_ROOT"' > ./tools/run-clsp-tests.sh
+        chmod +x ./tools/run-clsp-tests.sh
+        ./tools/run-clsp-tests.sh
