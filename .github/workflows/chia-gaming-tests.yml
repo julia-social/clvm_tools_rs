@@ -52,7 +52,11 @@ jobs:
       run: |
         cp support/chia-gaming-build.rs chia-gaming/build.rs
         cd chia-gaming
+        for file in $(find clsp -name \*.hex) ; do rm $file ; done
         cargo build
+        echo generated hex files
+        find clsp -name \*.hex
+        echo end hex files
 
     - name: Run chia-gaming chialisp tests
       run: |
