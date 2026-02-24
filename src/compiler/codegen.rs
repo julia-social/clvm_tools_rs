@@ -9,7 +9,7 @@ use num_bigint::ToBigInt;
 use crate::classic::clvm::__type_compatibility__::{bi_one, bi_zero};
 
 use crate::compiler::clvm::{run, sha256tree, truthy};
-use crate::compiler::compiler::{compile_from_compileform, is_at_capture, TTI};
+use crate::compiler::compiler::{compile_from_compileform, is_at_capture};
 use crate::compiler::comptypes::{
     fold_m, join_vecs_to_string, list_to_cons, Binding, BindingPattern, BodyForm, CallSpec,
     Callable, CompileErr, CompileForm, CompiledCode, CompilerOpts, CompilerOutput, ConstantKind,
@@ -1040,7 +1040,6 @@ fn codegen_(
     h: &HelperForm,
     allow_redef: bool,
 ) -> Result<PrimaryCodegen, CompileErr> {
-    let mut t = TTI::new(format!("codegen_ {}", decode_string(h.name())));
     match &h {
         HelperForm::Defun(inline, defun) => {
             if *inline {
@@ -1080,11 +1079,6 @@ fn codegen_(
                         .as_ref()
                         .and_then(|c| c.function_outputs.get(&the_hash).cloned())
                     {
-                        t.ttyell(&format!(
-                            "cache hit {} {}",
-                            decode_string(h.name()),
-                            filtered_env
-                        ));
                         return Ok(compiler.add_defun(
                             &defun.name,
                             defun.orig_args.clone(),
@@ -1093,12 +1087,6 @@ fn codegen_(
                                 code: code.clone(),
                             },
                             true, // Always take left env for now
-                        ));
-                    } else {
-                        t.ttyell(&format!(
-                            "cache miss {} {}",
-                            decode_string(h.name()),
-                            filtered_env
                         ));
                     }
                 }
@@ -1353,7 +1341,6 @@ pub fn toposort_assign_bindings(
 /// In the future, things such as lambdas will also desugar along these same
 /// routes.
 pub fn hoist_assign_form(letdata: &LetData) -> Result<BodyForm, CompileErr> {
-    let _t = TTI::new(format!("hoist_assign_form {}", letdata.loc.clone()));
     let sorted_spec = toposort_assign_bindings(&letdata.loc, &letdata.bindings)?;
 
     // Break up into stages of parallel let forms.
@@ -1673,7 +1660,6 @@ fn find_easiest_constant(
     constant_set: &HashSet<Vec<u8>>,
     constants: &[HelperForm],
 ) -> Option<HelperForm> {
-    // let _t = TTI::new("find_easiest_constant".to_string());
     let constants_in_set: Vec<HelperForm> = constants
         .iter()
         .filter(|c| constant_set.contains(c.name()))
@@ -1740,7 +1726,6 @@ fn decide_constant_generation_order(
     _compiler: &PrimaryCodegen,
     helpers: &[HelperForm],
 ) -> Result<Vec<HelperForm>, CompileErr> {
-    // let _t = TTI::new("decide_constant_generation_order".to_string());
     let mut exp = Rc::new(BodyForm::Quoted(SExp::Nil(loc.clone())));
 
     for h in helpers.iter() {
@@ -2205,7 +2190,6 @@ fn final_codegen(
     opts: Rc<dyn CompilerOpts>,
     compiler: &PrimaryCodegen,
 ) -> Result<PrimaryCodegen, CompileErr> {
-    // let _t = TTI::new("final_codegen".to_string());
     let opt_final_expr = context.pre_final_codegen_optimize(opts.clone(), compiler)?;
 
     let optimizer_opts = opts.clone();
@@ -2450,8 +2434,6 @@ pub fn codegen(
     opts: Rc<dyn CompilerOpts>,
     cmod: &CompileForm,
 ) -> Result<SExp, CompileErr> {
-    // let _t = TTI::new(format!("codegen {}", cmod.loc()));
-
     let mut start_of_codegen_optimization = StartOfCodegenOptimization {
         program: cmod.clone(),
         code_generator: dummy_functions(&start_codegen(context, opts.clone(), cmod.clone())?)?,
@@ -2516,7 +2498,6 @@ pub fn codegen(
         code_generator.module_phase,
         Some(ModulePhase::CommonPhase(true))
     ) {
-        // let _t = TTI::new("final_codegen - common phase".to_string());
         // We've got an order for generation that will allow us to have correct
         // constant order.  At this point we know that the constant order is
         // resolvable and doesn't have direct cycles.  It may be the case that

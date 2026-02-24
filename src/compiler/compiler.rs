@@ -1,5 +1,4 @@
 use num_bigint::ToBigInt;
-use num_integer::Integer;
 
 use std::borrow::Borrow;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -8,10 +7,7 @@ use std::io;
 // use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use std::sync::atomic::AtomicI32;
-use std::sync::atomic::Ordering;
+use std::time::UNIX_EPOCH;
 
 use clvm_rs::allocator::Allocator;
 
@@ -112,66 +108,6 @@ pub struct DefaultCompilerOpts {
     pub module_phase: Option<ModulePhase>,
 }
 
-lazy_static! {
-    pub static ref DEPTH: AtomicI32 = AtomicI32::new(0);
-    pub static ref START: SystemTime = SystemTime::now();
-}
-
-pub struct TTI {
-    pub ct: SystemTime,
-    pub nm: String,
-    pub id: String,
-    pub sv: Vec<String>,
-}
-
-impl TTI {
-    pub fn new(name: String) -> Self {
-        let mut indent = DEPTH.fetch_add(1, Ordering::SeqCst);
-        let mut id = "".to_string();
-        let mut id_step = "  ".to_string();
-
-        while indent > 0 {
-            if !indent.is_multiple_of(&2) {
-                id = format!("{id}{id_step}");
-            }
-            indent >>= 1;
-            id_step = format!("{id_step}{id_step}");
-        }
-
-        let mut t = TTI {
-            nm: name,
-            id,
-            ct: SystemTime::now(),
-            sv: vec![],
-        };
-        t.ttyell("start");
-        t
-    }
-
-    pub fn ttyell(&mut self, _t: &str) {
-        /*
-        if let Ok(mut file) = fs::OpenOptions::new()
-            .write(true)
-            .append(true)
-            .open("/dev/tty")
-        {
-            let ct = SystemTime::now();
-            let dt: chrono::DateTime<chrono::Utc> = ct.into();
-            writeln!(file, "{}{}{} {}", dt.format("%Y-%m-%d %H:%M:%S"), self.id, self.nm, t).ok();
-        }
-        */
-    }
-}
-
-impl Drop for TTI {
-    fn drop(&mut self) {
-        let ct = self.ct.elapsed().unwrap();
-        self.ttyell(&format!("duration {:?}", ct.as_secs()));
-
-        DEPTH.fetch_add(-1, Ordering::SeqCst);
-    }
-}
-
 pub fn create_prim_map() -> Rc<HashMap<Vec<u8>, Rc<SExp>>> {
     let mut prim_map: HashMap<Vec<u8>, Rc<SExp>> = HashMap::new();
 
@@ -223,9 +159,6 @@ pub fn finish_compilation(
     opts: Rc<dyn CompilerOpts>,
     p2: CompileForm,
 ) -> Result<SExp, CompileErr> {
-    // let mut t = TTI::new(format!("finish_compilation {}", opts.filename()));
-    // t.ttyell(&p2.to_sexp().to_string());
-
     let p3 = context.post_desugar_optimization(opts.clone(), p2)?;
 
     // generate code from AST, optionally with optimization
@@ -241,8 +174,6 @@ pub fn compile_from_compileform(
     opts: Rc<dyn CompilerOpts>,
     p0: CompileForm,
 ) -> Result<SExp, CompileErr> {
-    // let mut t = TTI::new(format!("compile_from_compileform {}", opts.filename()));
-    // t.ttyell(&p0.to_sexp().to_string());
     let p1 = context.frontend_optimization(opts.clone(), p0)?;
 
     // Resolve includes, convert program source to lexemes
@@ -471,8 +402,6 @@ pub fn compile_module(
     dialect.stepping = dialect.stepping.map(|x| std::cmp::max(x, 25));
 
     opts = opts.set_optimize(true).set_dialect(dialect);
-
-    let _t = TTI::new(format!("compile_module {}", opts.filename()));
 
     if exports.is_empty() {
         return Err(CompileErr(
@@ -728,8 +657,6 @@ pub fn try_from_cache(
     let mut summary = Rc::new(SExp::Nil(cf.loc.clone()));
     let mut data_to_write = Vec::new();
 
-    let _t = TTI::new(format!("try_from_cache {}", opts.filename()));
-
     for e in exports.iter() {
         let hex_file_name = { get_hex_name_of_export(opts.clone(), &cf.loc(), e) }?;
         let hex_data = {
@@ -884,7 +811,6 @@ pub fn compile_pre_forms(
                 return Ok(result);
             }
 
-            let _t = TTI::new(format!("compile_pre_forms {}", cf.loc()));
             // cl23 always reflects optimization.
             let dialect = opts.dialect();
             let opts = if let Some(stepping) = dialect.stepping.as_ref() {

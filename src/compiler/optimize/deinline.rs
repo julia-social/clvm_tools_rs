@@ -2,10 +2,8 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::rc::Rc;
 
 use crate::compiler::codegen::codegen;
-use crate::compiler::compiler::TTI;
 use crate::compiler::optimize::depgraph::{DepgraphKind, FunctionDependencyGraph};
 use crate::compiler::optimize::{sexp_scale, SyntheticType};
-use crate::compiler::sexp::decode_string;
 use crate::compiler::{
     BasicCompileContext, CompileErr, CompileForm, CompilerOpts, Funcache, HelperForm,
 };
@@ -57,8 +55,6 @@ pub fn deinline_opt(
     if compileform.helpers.is_empty() {
         return Ok(compileform);
     }
-
-    let cfsexp = compileform.to_sexp();
 
     if context.funcache.is_none() {
         context.funcache = Some(Funcache {
@@ -239,26 +235,7 @@ pub fn deinline_opt(
         root_set_to_inline_tree_vec.sort();
     }
 
-    let mut t = TTI::new("deinline_opt".to_string());
-    t.ttyell(&format!(
-        "{} stepping over 24 {} {cfsexp}",
-        opts.filename(),
-        stepping_over_24(opts.clone())
-    ));
-
-    for (i, (_, function_set)) in root_set_to_inline_tree_vec.iter().enumerate() {
-        let names_vec: Vec<String> = function_set.iter().map(|n| decode_string(n)).collect();
-        t.ttyell(&format!("functions set {i}: {names_vec:?}"));
-    }
-
-    let mut count = 0;
-
-    for (i, (_, function_set)) in root_set_to_inline_tree_vec.iter().enumerate() {
-        let mut s = TTI::new(format!(
-            "deinline_opt function set {} at {} iters",
-            i, count
-        ));
-
+    for (_, function_set) in root_set_to_inline_tree_vec.iter() {
         loop {
             let start_metric = metric;
 
@@ -279,23 +256,14 @@ pub fn deinline_opt(
                     continue;
                 }
 
-                count += 1;
-                s.ttyell(&format!("helper {}", decode_string(old_helper.name())));
 
-                let maybe_smaller_program = {
-                    let _u = TTI::new("codegen".to_string());
-                    codegen(context, opts.clone(), &compileform)
-                }?;
+                let maybe_smaller_program = codegen(context, opts.clone(), &compileform)?;
                 let new_metric = sexp_scale(&maybe_smaller_program);
 
                 // Don't keep this change if it made things worse.
                 if new_metric >= metric {
                     compileform.helpers[i] = old_helper;
                 } else {
-                    s.ttyell(&format!(
-                        "metric {new_metric} better than {metric} for {}",
-                        compileform.helpers[i].to_sexp()
-                    ));
                     metric = new_metric;
                     best_compileform = compileform.clone();
                 }
@@ -307,11 +275,5 @@ pub fn deinline_opt(
         }
     }
 
-    t.ttyell(&format!(
-        "{} iters ... done in {} {} {cfsexp}",
-        count,
-        opts.filename(),
-        stepping_over_24(opts.clone())
-    ));
     Ok(best_compileform)
 }
