@@ -66,4 +66,4 @@ jobs:
         # XXX somehow cargo test doesn't regenerate the hex files either, so that's likely a bug?
         mv tools/run-clsp-tests.sh tools/run-clsp-tests.no
         grep -v 'xargs rm' ./tools/run-clsp-tests.no > ./tools/run-clsp-tests.sh
-        ./tools/run-clsp-tests.sh
+        sh ./tools/run-clsp-tests.sh
