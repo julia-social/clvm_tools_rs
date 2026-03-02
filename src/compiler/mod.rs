@@ -65,7 +65,7 @@ impl Funcache {
         Funcache {
             function_outputs: HashMap::new(),
             dependency_graph: FunctionDependencyGraph::new_with_options(
-                &cf,
+                cf,
                 DepgraphOptions {
                     with_constants: true,
                 },
