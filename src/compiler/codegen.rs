@@ -980,7 +980,7 @@ pub fn codegen_(
                         defun.orig_args.clone(),
                         DefunCall {
                             required_env: defun.args.clone(),
-                            code: code,
+                            code,
                         },
                         true, // Always take left env for now
                     ));
