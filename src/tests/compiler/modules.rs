@@ -53,12 +53,6 @@ impl TestModuleCompilerOpts {
         let wf_ref: &mut HashMap<String, Vec<u8>> = &mut wf_refcell.borrow_mut();
         wf_ref.insert(name, content);
     }
-
-    pub fn erase_written<'a>(&'a self, name: &str) {
-        let wf_refcell: &RefCell<HashMap<String, Vec<u8>>> = self.written_files.borrow();
-        let wf_ref: &mut HashMap<String, Vec<u8>> = &mut wf_refcell.borrow_mut();
-        wf_ref.remove(name);
-    }
 }
 
 impl HasCompilerOptsDelegation for TestModuleCompilerOpts {
