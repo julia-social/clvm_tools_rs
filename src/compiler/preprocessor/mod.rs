@@ -992,7 +992,7 @@ impl Preprocessor {
                     .map(nilize)
                     .map_err(CompileErr::from)?;
 
-                    if let Some(final_result) = self.expand_macros(res.clone(), true)? {
+                    if let Some(final_result) = self.expand_macros(res.clone())? {
                         return Ok(Some(final_result));
                     } else {
                         return Ok(Some(res));
