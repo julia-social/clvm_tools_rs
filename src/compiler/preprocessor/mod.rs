@@ -287,12 +287,12 @@ impl Preprocessor {
                             mdata.args.clone(),
                         )?;
 
-                        let mut context = BasicCompileContext {
-                            allocator: Allocator::new(),
-                            runner: self.runner.clone(),
-                            symbols: HashMap::new(),
-                            optimizer: get_optimizer(&body.loc(), self.opts.clone())?,
-                        };
+                        let mut context = BasicCompileContext::new(
+                            Allocator::new(),
+                            self.runner.clone(),
+                            HashMap::new(),
+                            get_optimizer(&body.loc(), self.opts.clone())?,
+                        );
                         let compiled_program =
                             if let Some(compiled_program) = self.stored_macros.get(&mdata.name) {
                                 compiled_program.clone()
