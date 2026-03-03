@@ -11,7 +11,7 @@ use crate::compiler::sexp::decode_string;
 /// BASE_STEPPING, all of which should use similar optimizer objects.
 pub const OPT_STRATEGY_BASE_STEPPING: i32 = 23;
 /// The maximum stepping of the language so far.
-pub const MAX_STEPPING: i32 = 24;
+pub const MAX_STEPPING: i32 = 25;
 
 /// Specifying how the language is spoken.
 #[derive(Clone, Debug, Default)]

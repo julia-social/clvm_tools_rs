@@ -26,9 +26,9 @@ use crate::compiler::prims::{primapply, primcons, primquote};
 use crate::compiler::runtypes::RunFailure;
 use crate::compiler::sexp::{decode_string, printable, SExp};
 use crate::compiler::srcloc::Srcloc;
-use crate::compiler::Funcache;
 use crate::compiler::StartOfCodegenOptimization;
 use crate::compiler::{BasicCompileContext, CompileContextWrapper};
+use crate::compiler::{Funcache, FunctionEntry};
 use crate::util::{toposort, u8_from_number, TopoSortItem};
 
 const MACRO_TIME_LIMIT: usize = 1000000;
@@ -879,14 +879,43 @@ fn get_depended_on_forms(
     mut env_shape: Rc<SExp>,
     used: &[Vec<u8>],
 ) -> Rc<SExp> {
+    let append_with_name = |env_shape: Rc<SExp>, name: &[u8], body: Rc<SExp>| {
+        Rc::new(SExp::Cons(
+            loc.clone(),
+            Rc::new(SExp::Cons(
+                loc.clone(),
+                Rc::new(SExp::Atom(loc.clone(), name.to_vec())),
+                body,
+            )),
+            env_shape,
+        ))
+    };
     for name in used.iter() {
         if let Some(c) = compiler.constants.get(name) {
-            env_shape = Rc::new(SExp::Cons(loc.clone(), c.clone(), env_shape));
+            env_shape = append_with_name(
+                env_shape,
+                name,
+                Rc::new(SExp::Cons(
+                    c.loc(),
+                    Rc::new(SExp::Nil(loc.clone())),
+                    c.clone(),
+                )),
+            );
         } else if let Some(c) = compiler.tabled_constants.get(name) {
-            env_shape = Rc::new(SExp::Cons(loc.clone(), c.clone(), env_shape));
+            env_shape = append_with_name(
+                env_shape,
+                name,
+                Rc::new(SExp::Cons(
+                    c.loc(),
+                    Rc::new(SExp::Atom(loc.clone(), vec![1])),
+                    c.clone(),
+                )),
+            );
         } else if let Some(i) = compiler.inlines.get(name) {
-            env_shape = Rc::new(SExp::Cons(loc.clone(), i.to_sexp(), env_shape));
+            env_shape = append_with_name(env_shape, name, i.to_sexp());
         }
+        // Out of line functions are captured by the environment and it's ok for them
+        // to not have a full definition when generating code for other out of line functions.
     }
     env_shape
 }
@@ -913,7 +942,7 @@ fn get_function_cache_key(
     sha256tree(hashable)
 }
 
-fn codegen_(
+pub fn codegen_(
     context: &mut BasicCompileContext,
     opts: Rc<dyn CompilerOpts>,
     compiler: &PrimaryCodegen,
@@ -942,14 +971,14 @@ fn codegen_(
                     context
                         .funcache
                         .as_ref()
-                        .and_then(|c| c.function_outputs.get(key).cloned())
+                        .and_then(|c| c.function_outputs.get(key).map(|e| e.code.clone()))
                 }) {
                     return Ok(compiler.add_defun(
                         &defun.name,
                         defun.orig_args.clone(),
                         DefunCall {
                             required_env: defun.args.clone(),
-                            code: code.clone(),
+                            code,
                         },
                         true, // Always take left env for now
                     ));
@@ -997,7 +1026,13 @@ fn codegen_(
                     })
                     .map(|code| {
                         if let (Some(fc), Some(hash)) = (&mut context.funcache, cache_key) {
-                            fc.function_outputs.insert(hash, code.clone());
+                            fc.function_outputs.insert(
+                                hash,
+                                FunctionEntry {
+                                    code: code.clone(),
+                                    name: h.name().to_vec(),
+                                },
+                            );
                         }
 
                         compiler.add_defun(
