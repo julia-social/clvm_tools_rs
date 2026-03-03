@@ -1091,7 +1091,6 @@ fn get_function_cache_key(
     let depended_on =
         get_depended_on_forms(compiler, helper.loc(), filtered_env.clone(), &depends_on);
     let hashable = Rc::new(SExp::Cons(helper.loc(), helper.to_sexp(), depended_on));
-    eprintln!("cache key {}: {}", decode_string(helper.name()), hashable);
     sha256tree(hashable)
 }
 
@@ -1127,7 +1126,6 @@ pub fn codegen_(
                         .as_ref()
                         .and_then(|c| c.function_outputs.get(key).map(|e| e.code.clone()))
                 }) {
-                    eprintln!("cache hit {}: {}", decode_string(h.name()), code);
                     return Ok(compiler.add_defun(
                         &defun.name,
                         defun.orig_args.clone(),
