@@ -257,12 +257,7 @@ impl<'a> CompileContextWrapper<'a> {
     ) -> Self {
         let runner = context.runner();
         let optimizer = context.optimizer.duplicate();
-        let bcc = BasicCompileContext {
-            allocator: Allocator::new(),
-            runner,
-            symbols: HashMap::new(),
-            optimizer,
-        };
+        let bcc = BasicCompileContext::new(Allocator::new(), runner, HashMap::new(), optimizer);
         let mut wrapper = CompileContextWrapper {
             allocator: &mut context.allocator,
             symbols,
