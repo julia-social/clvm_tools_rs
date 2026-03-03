@@ -48,16 +48,16 @@ impl TestModuleCompilerOpts {
         files.get(name).map(|f| f.to_vec())
     }
 
+    pub fn list_written_files<'a>(&'a self) -> Vec<String> {
+        let files_ref: &RefCell<HashMap<String, Vec<u8>>> = self.written_files.borrow();
+        let files: &HashMap<String, Vec<u8>> = &files_ref.borrow();
+        files.keys().cloned().collect()
+    }
+
     pub fn set_file_content<'a>(&'a self, name: String, content: Vec<u8>) {
         let wf_refcell: &RefCell<HashMap<String, Vec<u8>>> = self.written_files.borrow();
         let wf_ref: &mut HashMap<String, Vec<u8>> = &mut wf_refcell.borrow_mut();
         wf_ref.insert(name, content);
-    }
-
-    pub fn erase_written<'a>(&'a self, name: &str) {
-        let wf_refcell: &RefCell<HashMap<String, Vec<u8>>> = self.written_files.borrow();
-        let wf_ref: &mut HashMap<String, Vec<u8>> = &mut wf_refcell.borrow_mut();
-        wf_ref.remove(name);
     }
 }
 
@@ -624,10 +624,15 @@ fn test_cache_reuses_cache_data() {
 
 (export (X) (+ (a P1S (list X)) (a P1T (list X))))
 "};
-    // We've set p1t to () and changed the main program so it will also recompile.  If the cache
-    // is used to retrieve p1t.clsp (since the source file is the same as during the previous
-    // compilation), then (a P1T (list X)) will yield 0.
-    source_opts.set_file_content(".chialisp/1bebfef994a8f4aeca386e7ad3b710b1cf861e5fb3b47cd6906c63b507d457a2/resources/tests/module/programs/p1t.hex".to_string(), b"80".to_vec());
+
+    let file_list = source_opts.list_written_files();
+    for f in file_list.iter().filter(|f| f.ends_with("p1t.hex")) {
+        // We've set p1t to () and changed the main program so it will also recompile.  If the cache
+        // is used to retrieve p1t.clsp (since the source file is the same as during the previous
+        // compilation), then (a P1T (list X)) will yield 0.
+        source_opts.set_file_content(f.clone(), b"80".to_vec());
+    }
+
     test_compile_and_run_program_with_modules_and_fs(
         source_opts,
         filename,

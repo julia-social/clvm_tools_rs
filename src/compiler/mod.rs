@@ -45,8 +45,34 @@ use crate::classic::clvm_tools::stages::stage_0::TRunProgram;
 use crate::compiler::comptypes::{
     BodyForm, CompileErr, CompileForm, CompilerOpts, DefunData, HelperForm, PrimaryCodegen,
 };
+use crate::compiler::optimize::depgraph::{DepgraphOptions, FunctionDependencyGraph};
 use crate::compiler::optimize::Optimization;
 use crate::compiler::sexp::SExp;
+
+#[derive(Clone)]
+pub struct FunctionEntry {
+    pub name: Vec<u8>,
+    pub code: Rc<SExp>,
+}
+
+pub struct Funcache {
+    pub function_outputs: HashMap<Vec<u8>, FunctionEntry>,
+    pub dependency_graph: FunctionDependencyGraph,
+}
+
+impl Funcache {
+    pub fn new(cf: &CompileForm) -> Self {
+        Funcache {
+            function_outputs: HashMap::new(),
+            dependency_graph: FunctionDependencyGraph::new_with_options(
+                cf,
+                DepgraphOptions {
+                    with_constants: true,
+                },
+            ),
+        }
+    }
+}
 
 /// An object which represents the standard set of mutable items passed down the
 /// stack when compiling chialisp.
@@ -55,6 +81,9 @@ pub struct BasicCompileContext {
     pub runner: Rc<dyn TRunProgram>,
     pub symbols: HashMap<String, String>,
     pub optimizer: Box<dyn Optimization>,
+    /// Given the operative environment and a serialization of the helper, this is the generated
+    /// code from that helper.
+    pub funcache: Option<Funcache>,
 }
 
 impl BasicCompileContext {
@@ -202,6 +231,7 @@ impl BasicCompileContext {
             runner,
             symbols,
             optimizer,
+            funcache: None,
         }
     }
 }
@@ -241,12 +271,7 @@ impl<'a> CompileContextWrapper<'a> {
         symbols: &'a mut HashMap<String, String>,
         optimizer: Box<dyn Optimization>,
     ) -> Self {
-        let bcc = BasicCompileContext {
-            allocator: Allocator::new(),
-            runner,
-            symbols: HashMap::new(),
-            optimizer,
-        };
+        let bcc = BasicCompileContext::new(Allocator::new(), runner, HashMap::new(), optimizer);
         let mut wrapper = CompileContextWrapper {
             allocator,
             symbols,
@@ -262,12 +287,7 @@ impl<'a> CompileContextWrapper<'a> {
     ) -> Self {
         let runner = context.runner();
         let optimizer = context.optimizer.duplicate();
-        let bcc = BasicCompileContext {
-            allocator: Allocator::new(),
-            runner,
-            symbols: HashMap::new(),
-            optimizer,
-        };
+        let bcc = BasicCompileContext::new(Allocator::new(), runner, HashMap::new(), optimizer);
         let mut wrapper = CompileContextWrapper {
             allocator: &mut context.allocator,
             symbols,
