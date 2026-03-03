@@ -27,13 +27,8 @@ fn main() {
             return;
         }
     };
-    let mut context = BasicCompileContext {
-        allocator: Allocator::new(),
-        runner: runner.clone(),
-        symbols: HashMap::new(),
-        funcache: None,
-        optimizer,
-    };
+    let mut context =
+        BasicCompileContext::new(Allocator::new(), runner.clone(), HashMap::new(), optimizer);
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         println!("give a chialisp program to minify");

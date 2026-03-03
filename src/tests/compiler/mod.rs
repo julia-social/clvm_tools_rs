@@ -7,6 +7,7 @@ use crate::compiler::srcloc::{Srcloc, Until};
 mod assign;
 mod cldb;
 mod clvm;
+mod codegen_funcache;
 mod compiler;
 mod evaluate;
 mod fuzz;
