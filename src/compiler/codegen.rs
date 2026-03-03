@@ -29,6 +29,7 @@ use crate::compiler::sexp::{decode_string, printable, SExp};
 use crate::compiler::srcloc::Srcloc;
 use crate::compiler::StartOfCodegenOptimization;
 use crate::compiler::{BasicCompileContext, CompileContextWrapper};
+use crate::compiler::{Funcache, FunctionEntry};
 use crate::util::{toposort, u8_from_number, Number, TopoSortItem};
 
 const MACRO_TIME_LIMIT: usize = 1000000;
@@ -991,6 +992,10 @@ fn fail_if_present<T, R>(
     }
 }
 
+// Remove anything in the environment that isn't used by the caller and replace it with nil.
+// the effect of this is to make only positional changes of things this function depends on
+// matter.  If a rearrangement occurs in things the caller doesn't depend on that leads to
+// the same arrangement of things it does, then the output will be the same.
 fn filter_env(used: &[Vec<u8>], nil: Rc<SExp>, env: Rc<SExp>) -> Rc<SExp> {
     match env.atomize() {
         SExp::Atom(_l, n) => {
@@ -1015,25 +1020,81 @@ fn filter_env(used: &[Vec<u8>], nil: Rc<SExp>, env: Rc<SExp>) -> Rc<SExp> {
     }
 }
 
+// Make an sexp that contains the form of everything the caller depends on.  Any change in these,
+// such as whether a function is inline or not, the form of the environment or whether any constant
+// is inline or tabled, will change this value and therefore its hash.  If nohting relevant changed
+// then this value will be the same and a previously generated version of the caller's function
+// body can be used.
 fn get_depended_on_forms(
     compiler: &PrimaryCodegen,
     loc: Srcloc,
-    mut result: Rc<SExp>,
+    mut env_shape: Rc<SExp>,
     used: &[Vec<u8>],
 ) -> Rc<SExp> {
+    let append_with_name = |env_shape: Rc<SExp>, name: &[u8], body: Rc<SExp>| {
+        Rc::new(SExp::Cons(
+            loc.clone(),
+            Rc::new(SExp::Cons(
+                loc.clone(),
+                Rc::new(SExp::Atom(loc.clone(), name.to_vec())),
+                body,
+            )),
+            env_shape,
+        ))
+    };
     for name in used.iter() {
         if let Some(c) = compiler.constants.get(name) {
-            result = Rc::new(SExp::Cons(loc.clone(), c.clone(), result));
+            env_shape = append_with_name(
+                env_shape,
+                name,
+                Rc::new(SExp::Cons(
+                    c.loc(),
+                    Rc::new(SExp::Nil(loc.clone())),
+                    c.clone(),
+                )),
+            );
         } else if let Some(c) = compiler.tabled_constants.get(name) {
-            result = Rc::new(SExp::Cons(loc.clone(), c.clone(), result));
+            env_shape = append_with_name(
+                env_shape,
+                name,
+                Rc::new(SExp::Cons(
+                    c.loc(),
+                    Rc::new(SExp::Atom(loc.clone(), vec![1])),
+                    c.clone(),
+                )),
+            );
         } else if let Some(i) = compiler.inlines.get(name) {
-            result = Rc::new(SExp::Cons(loc.clone(), i.to_sexp(), result));
+            env_shape = append_with_name(env_shape, name, i.to_sexp());
         }
+        // Out of line functions are captured by the environment and it's ok for them
+        // to not have a full definition when generating code for other out of line functions.
     }
-    result
+    env_shape
 }
 
-fn codegen_(
+fn get_function_cache_key(
+    compiler: &PrimaryCodegen,
+    fc: &Funcache,
+    helper: &HelperForm,
+) -> Vec<u8> {
+    let mut depends_on_set = HashSet::new();
+    fc.dependency_graph
+        .get_full_depends_on(&mut depends_on_set, helper.name());
+    let mut depends_on: Vec<_> = depends_on_set.into_iter().collect();
+    depends_on.sort();
+    // Collect depended on function forms
+    let filtered_env = filter_env(
+        &depends_on,
+        Rc::new(SExp::Nil(helper.loc())),
+        compiler.env.clone(),
+    );
+    let depended_on =
+        get_depended_on_forms(compiler, helper.loc(), filtered_env.clone(), &depends_on);
+    let hashable = Rc::new(SExp::Cons(helper.loc(), helper.to_sexp(), depended_on));
+    sha256tree(hashable)
+}
+
+pub fn codegen_(
     context: &mut BasicCompileContext,
     opts: Rc<dyn CompilerOpts>,
     compiler: &PrimaryCodegen,
@@ -1054,42 +1115,29 @@ fn codegen_(
                     },
                 ))
             } else {
-                let env: &SExp = compiler.env.borrow();
-                let mut hash = None;
+                let cache_key = context
+                    .funcache
+                    .as_ref()
+                    .map(|fc| get_function_cache_key(compiler, fc, h));
 
-                if let Some(fc) = &mut context.funcache {
-                    let mut depends_on_set = HashSet::new();
-                    fc.dependency_graph
-                        .get_full_depends_on(&mut depends_on_set, h.name());
-                    let mut depends_on: Vec<_> = depends_on_set.into_iter().collect();
-                    depends_on.sort();
-                    // Collect depended on function forms
-                    let filtered_env = filter_env(
-                        &depends_on,
-                        Rc::new(SExp::Nil(h.loc())),
-                        compiler.env.clone(),
-                    );
-                    let depended_on =
-                        get_depended_on_forms(compiler, h.loc(), filtered_env.clone(), &depends_on);
-                    let hashable = Rc::new(SExp::Cons(h.loc(), h.to_sexp(), depended_on));
-                    let the_hash = sha256tree(hashable);
-                    hash = Some(the_hash.clone());
-                    if let Some(code) = context
+                if let Some(code) = cache_key.as_ref().and_then(|key| {
+                    context
                         .funcache
                         .as_ref()
-                        .and_then(|c| c.function_outputs.get(&the_hash).cloned())
-                    {
-                        return Ok(compiler.add_defun(
-                            &defun.name,
-                            defun.orig_args.clone(),
-                            DefunCall {
-                                required_env: defun.args.clone(),
-                                code: code.clone(),
-                            },
-                            true, // Always take left env for now
-                        ));
-                    }
+                        .and_then(|c| c.function_outputs.get(key).map(|e| e.code.clone()))
+                }) {
+                    return Ok(compiler.add_defun(
+                        &defun.name,
+                        defun.orig_args.clone(),
+                        DefunCall {
+                            required_env: defun.args.clone(),
+                            code,
+                        },
+                        true, // Always take left env for now
+                    ));
                 }
+
+                let env: &SExp = compiler.env.borrow();
 
                 let updated_opts = opts
                     .set_code_generator(compiler.clone())
@@ -1154,8 +1202,14 @@ fn codegen_(
                     fail_if_present(defun.loc.clone(), &compiler.defuns, &defun.name, code)?
                 };
 
-                if let (Some(fc), Some(hash)) = (&mut context.funcache, hash) {
-                    fc.function_outputs.insert(hash, code.clone());
+                if let (Some(fc), Some(hash)) = (&mut context.funcache, cache_key) {
+                    fc.function_outputs.insert(
+                        hash,
+                        FunctionEntry {
+                            code: code.clone(),
+                            name: h.name().to_vec(),
+                        },
+                    );
                 }
 
                 Ok(compiler.add_defun(

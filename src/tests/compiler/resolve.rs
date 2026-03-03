@@ -25,13 +25,12 @@ fn compile_program_get_result(
     let processed = frontend(opts.clone(), &parsed)?;
     let resolved = resolve_namespaces(opts.clone(), &processed.compileform())?;
     let desugared = do_desugar(opts.clone(), &resolved)?;
-    let mut context = BasicCompileContext {
-        allocator: Allocator::new(),
-        runner: Rc::new(DefaultProgramRunner::new()),
-        symbols: HashMap::new(),
-        optimizer: get_optimizer(&loc, opts.clone())?,
-        funcache: None,
-    };
+    let mut context = BasicCompileContext::new(
+        Allocator::new(),
+        Rc::new(DefaultProgramRunner::new()),
+        HashMap::new(),
+        get_optimizer(&loc, opts.clone())?,
+    );
     let generated = codegen(&mut context, opts.clone(), &desugared)?;
     run(
         &mut context.allocator,
