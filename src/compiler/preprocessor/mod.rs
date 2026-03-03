@@ -465,7 +465,6 @@ impl Preprocessor {
         filename: &str,
         content: &[u8],
     ) -> Result<Vec<Rc<SExp>>, CompileErr> {
-        // let _t = TTI::new(format!("import_program {}", filename));
         let srcloc = Srcloc::start(filename);
         let mut allocator = Allocator::new();
         let mut symbol_table = HashMap::new();
@@ -505,7 +504,6 @@ impl Preprocessor {
 
         if !have_module {
             let dialect = detect_modern(&mut allocator, classic_parse);
-            // let _t = TTI::new(format!("load module {filename}"));
 
             if dialect.stepping.is_none() {
                 // Classic compile.
@@ -624,8 +622,6 @@ impl Preprocessor {
             &import_name.as_u8_vec(LongNameTranslation::Filename(".clinc".to_string())),
         );
 
-        // let _t = TTI::new(format!("import_new_module {:?}", loc));
-
         if let Ok((full_name, content)) =
             self.opts.read_new_file(self.opts.filename(), filename_clsp)
         {
@@ -686,8 +682,6 @@ impl Preprocessor {
             self.add_helper(ns_helper.clone());
             return Ok(vec![ns_helper.to_sexp()]);
         }
-
-        // let _t = TTI::new(format!("import_module {nl:?}"));
 
         // Add an empty namespace to be added to while working.
         let empty_ns = self.make_namespace_helper(&loc, &full_import_name);
@@ -1283,7 +1277,6 @@ impl Preprocessor {
         includes: &mut Vec<IncludeDesc>,
         unexpanded_body: Rc<SExp>,
     ) -> Result<Vec<Rc<SExp>>, CompileErr> {
-        // let _t = TTI::new(format!("process pp form {}", unexpanded_body));
         let mut body = unexpanded_body.clone();
 
         loop {
@@ -1357,7 +1350,6 @@ impl Preprocessor {
         includes: &mut Vec<IncludeDesc>,
         cmod: &[Rc<SExp>],
     ) -> Result<PreprocessResult, CompileErr> {
-        // let _t = TTI::new(format!("pp::run {}", cmod[0].loc().file));
         let mut result = Vec::new();
 
         if self.opts.stdenv() {
@@ -1380,7 +1372,6 @@ impl Preprocessor {
         includes: &mut Vec<IncludeDesc>,
         cmod: &[Rc<SExp>],
     ) -> Result<PreprocessResult, CompileErr> {
-        // let _t = TTI::new(format!("pp::run_modules {}", cmod[0].loc().file));
         if !cmod.is_empty() {
             self.prelude_import = Rc::new(SExp::Cons(
                 cmod[0].loc(),

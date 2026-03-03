@@ -622,7 +622,6 @@ pub fn hex_to_modern_sexp(
     loc: Srcloc,
     input_program: &str,
 ) -> Result<Rc<SExp>, RunFailure> {
-    // let _t = TTI::new(format!("hex_to_modern_sexp {:?}", loc));
     let input_serialized = Bytes::new_validated(Some(UnvalidatedBytesFromType::Hex(
         input_program.to_string(),
     )))
