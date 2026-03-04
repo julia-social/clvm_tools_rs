@@ -457,6 +457,24 @@ pub enum ModuleImportSpec {
     Hiding(Srcloc, Vec<ModuleImportListedName>),
 }
 
+fn require_kw_atom(kw: &[u8], sexp: &SExp) -> Result<(), CompileErr> {
+    let matched_as_kw =
+        if let SExp::Atom(_, as_word) = sexp {
+            as_word == kw
+        } else {
+            false
+        };
+
+    if matched_as_kw {
+        return Ok(());
+    }
+
+    Err(CompileErr(
+        sexp.loc(),
+        "'as' keyword expected".to_string(),
+    ))
+}
+
 pub fn match_as_named(loc: Srcloc, lst: &[SExp], offset: usize) -> Option<ExportFunctionDesc> {
     let name_offset = offset;
     let small = 1 + offset;
@@ -487,14 +505,10 @@ pub fn match_as_named(loc: Srcloc, lst: &[SExp], offset: usize) -> Option<Export
     };
 
     if lst.len() == large {
-        if let SExp::Atom(as_loc, as_atom) = lst[as_kw].borrow() {
-            // Not 'as'
-            if as_atom != b"as" {
-                return None;
-            }
-            result.as_loc = Some(as_loc.clone());
-        } else {
+        if require_kw_atom(b"as", &lst[as_kw]).is_err() {
             return None;
+        } else {
+            result.as_loc = Some(lst[as_kw].loc());
         }
 
         if let SExp::Atom(as_name_loc, as_name) = lst[as_name_offset].borrow() {
@@ -574,14 +588,7 @@ impl ModuleImportSpec {
                     ));
                 };
 
-                if let SExp::Atom(_, as_word) = &forms[3] {
-                    if as_word != b"as" {
-                        return Err(CompileErr(
-                            forms[3].loc(),
-                            "'as' keyword expected".to_string(),
-                        ));
-                    }
-                }
+                require_kw_atom(b"as", &forms[3])?;
 
                 let (relative_qual, import_name) = ImportLongName::parse(&qname);
 
