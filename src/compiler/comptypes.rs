@@ -669,7 +669,7 @@ impl ModuleImportSpec {
 
         match kw_kind {
             KwImportKind::ImportExposing => Ok(ModuleImportSpec::Exposing(kw_loc.clone(), words)),
-            KwImportKind::ImportHiding => Ok(ModuleImportSpec::Hiding(loc, words)),
+            KwImportKind::ImportHiding => Ok(ModuleImportSpec::Hiding(kw_loc.clone(), words)),
         }
     }
 
