@@ -750,7 +750,7 @@ pub fn compile_nsref(loc: Srcloc, internal: &[SExp]) -> Result<HelperForm, Compi
         ));
     }
 
-    let import_spec = ModuleImportSpec::parse(loc.clone(), internal[0].loc(), internal, 1)?;
+    let import_spec = ModuleImportSpec::parse(loc.clone(), internal, 1)?;
     if let ModuleImportSpec::Qualified(q) = &import_spec {
         return Ok(HelperForm::Defnsref(Box::new(NamespaceRefData {
             loc,

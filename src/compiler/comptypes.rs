@@ -333,21 +333,6 @@ impl ImportLongName {
         ImportLongName { components: result }
     }
 
-    /// True if parent namespace contains self.
-    pub fn is_contained_by(&self, parent: &ImportLongName) -> bool {
-        if self.components.len() < parent.components.len() {
-            return false;
-        }
-
-        for (i, p) in parent.components.iter().enumerate() {
-            if self.components[i] != *p {
-                return false;
-            }
-        }
-
-        true
-    }
-
     /// Add a name that selects a specified child for a given namespace.
     pub fn with_child(&self, name: &[u8]) -> Self {
         let mut result = self.components.clone();
@@ -537,7 +522,6 @@ impl ModuleImportSpec {
 
     pub fn parse(
         loc: Srcloc,
-        kw: Srcloc,
         forms: &[SExp],
         mut import_names_location: usize,
     ) -> Result<Self, CompileErr> {
@@ -607,7 +591,7 @@ impl ModuleImportSpec {
                 // Fixed format: import qualified X
                 return Ok(ModuleImportSpec::Qualified(Box::new(QualifiedModuleInfo {
                     loc: loc.clone(),
-                    kw: kw.clone(),
+                    kw: first_loc.clone(),
                     nl: second_loc.clone(),
                     name: p,
                     target: None,
