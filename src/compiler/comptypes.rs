@@ -516,6 +516,9 @@ pub fn match_as_named(loc: Srcloc, lst: &[SExp], offset: usize) -> Option<Export
                 value: as_name.clone(),
                 loc: Some(as_name_loc.clone()),
             });
+        } else {
+            // Not an atom to rename to, fail to parse.
+            return None;
         }
     };
 

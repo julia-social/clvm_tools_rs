@@ -147,3 +147,10 @@ fn test_resolve_error_on_bad_as_keyword_rename() {
         "(mod (A) (include *standard-cl-24*) (namespace Z (defconst Q 1)) (namespace X (import qualified Z as Z1) (defun F (Z) (assign ZZ (+ Z Z1.Q) ZZ))) (import X exposing (F 1337 FF)) (FF 3))";
     assert!(compile_program_get_result(test_program, "(3)").is_err());
 }
+
+#[test]
+fn test_resolve_error_on_bad_as_keyword_rename_target() {
+    let test_program =
+        "(mod (A) (include *standard-cl-24*) (namespace Z (defconst Q 1)) (namespace X (import qualified Z as Z1) (defun F (Z) (assign ZZ (+ Z Z1.Q) ZZ))) (import X exposing (F as 1337)) (FF 3))";
+    assert!(compile_program_get_result(test_program, "(3)").is_err());
+}
