@@ -74,6 +74,10 @@ impl<'a> Iterator for TourNamespaces<'a> {
             self.look_stack[ls_at].offset += 1;
 
             if let HelperForm::Defnamespace(ns) = current {
+                // Note: the scope stack here is to return to the current namespace
+                // to continue resolving helpers.  Namespaces act independently as
+                // providers of named helpers in the namespace they individually
+                // identify.
                 self.look_stack.push(FindNamespaceLookingAtHelpers {
                     hlist: &ns.helpers,
                     namespace: Some(&ns.longname),
@@ -567,12 +571,6 @@ fn resolve_namespaces_in_helper(
 ) -> Result<HelperForm, CompileErr> {
     match helper {
         HelperForm::Defnamespace(ns) => {
-            let combined_ns = if let Some(p) = parent_ns {
-                p.combine(&ns.longname)
-            } else {
-                ns.longname.clone()
-            };
-
             let mut result_helpers = Vec::new();
 
             for h in ns.helpers.iter() {
@@ -580,7 +578,7 @@ fn resolve_namespaces_in_helper(
                     resolved_helpers,
                     opts.clone(),
                     program,
-                    Some(&combined_ns),
+                    Some(&ns.longname),
                     h,
                 )?;
                 result_helpers.push(newly_created);
