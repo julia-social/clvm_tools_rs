@@ -755,7 +755,7 @@ pub fn compile_nsref(loc: Srcloc, internal: &[SExp]) -> Result<HelperForm, Compi
         return Ok(HelperForm::Defnsref(Box::new(NamespaceRefData {
             loc,
             kw: internal[0].loc(),
-            nl: internal[1].loc(),
+            nl: q.nl.clone(),
             rendered_name: q.name.as_u8_vec(LongNameTranslation::Namespace),
             longname: q.name.clone(),
             specification: import_spec.clone(),

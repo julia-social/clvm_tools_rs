@@ -493,7 +493,7 @@ fn resolve_namespaces_in_expr(
         }
         BodyForm::Let(LetFormKind::Assign, ld) => {
             let mut new_scope = in_scope.clone();
-            let mut new_bindings = Vec::new();
+            let mut new_bindings = ld.bindings.clone();
             let sorted_bindings = toposort_assign_bindings(&expr.loc(), &ld.bindings)?;
             for b in sorted_bindings.iter() {
                 let b_borrowed: &Binding = ld.bindings[b.index].borrow();
@@ -508,7 +508,7 @@ fn resolve_namespaces_in_expr(
                     )?,
                     ..b_borrowed.clone()
                 };
-                new_bindings.push(Rc::new(new_binding));
+                new_bindings[b.index] = Rc::new(new_binding);
                 add_binding_names(&mut new_scope, &b_borrowed.pattern);
             }
             Ok(Rc::new(BodyForm::Let(
