@@ -458,21 +458,17 @@ pub enum ModuleImportSpec {
 }
 
 fn require_kw_atom(kw: &[u8], sexp: &SExp) -> Result<(), CompileErr> {
-    let matched_as_kw =
-        if let SExp::Atom(_, as_word) = sexp {
-            as_word == kw
-        } else {
-            false
-        };
+    let matched_as_kw = if let SExp::Atom(_, as_word) = sexp {
+        as_word == kw
+    } else {
+        false
+    };
 
     if matched_as_kw {
         return Ok(());
     }
 
-    Err(CompileErr(
-        sexp.loc(),
-        "'as' keyword expected".to_string(),
-    ))
+    Err(CompileErr(sexp.loc(), "'as' keyword expected".to_string()))
 }
 
 pub fn match_as_named(loc: Srcloc, lst: &[SExp], offset: usize) -> Option<ExportFunctionDesc> {
