@@ -69,6 +69,14 @@ fn test_compile_module_with_resolver() {
 }
 
 #[test]
+fn test_compile_module_with_resolver_renaming() {
+    let test_program =
+        "(mod (A) (include *standard-cl-24*) (namespace Z (defconst Q 1)) (namespace X (import qualified Z as Z1) (defun F (Z) (+ Z Z1.Q)) (defun G (Z) (- Z Z1.Q))) (import X exposing (F as FF)) (namespace Y (defun G (Z) (* Z 2))) (import Y exposing (G as GG)) (FF (GG (+ A (@ 5)))))";
+    let outcome = compile_program_get_result(test_program, "(3)").unwrap();
+    assert_eq!(outcome.to_string(), "13");
+}
+
+#[test]
 fn test_helper_not_found() {
     let test_program =
         "(mod (A) (include *standard-cl-24*) (namespace Z (defconst Q 1)) (import Z exposing Q1) Q1)";
