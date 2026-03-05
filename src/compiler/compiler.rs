@@ -114,16 +114,6 @@ pub fn create_prim_map() -> Rc<HashMap<Vec<u8>, Rc<SExp>>> {
     Rc::new(prim_map)
 }
 
-pub fn desugar_frontend(
-    context: &mut BasicCompileContext,
-    opts: Rc<dyn CompilerOpts>,
-    p0: CompileForm,
-) -> Result<CompileForm, CompileErr> {
-    let p1 = context.frontend_optimization(opts.clone(), p0)?;
-
-    do_desugar(&p1)
-}
-
 pub fn do_desugar(program: &CompileForm) -> Result<CompileForm, CompileErr> {
     // Transform let bindings, merging nested let scopes with the top namespace
     let hoisted_bindings = hoist_body_let_binding(None, program.args.clone(), program.exp.clone())?;
@@ -679,9 +669,6 @@ fn capture_standalone_constants(
 fn add_inline_hash_for_constant(program: &mut CompileForm, loc: &Srcloc, fun_name: &[u8]) {
     let mut new_name = fun_name.to_vec();
     new_name.extend(b"_hash".to_vec());
-
-    let mut underscore_name = new_name.clone();
-    underscore_name.insert(0, b'_');
 
     program.helpers.push(HelperForm::Defun(
         true,

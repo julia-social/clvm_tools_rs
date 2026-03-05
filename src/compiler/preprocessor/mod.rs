@@ -232,34 +232,36 @@ fn make_namespace_ref(
 
 pub fn detect_chialisp_module(pre_forms: &[Rc<SExp>]) -> Option<AcceptedDialect> {
     let dialect = KNOWN_DIALECTS
-        .get("*standard-cl-23*")
+        .get("*standard-cl-25*")
         .unwrap()
         .accepted
         .clone();
 
     if pre_forms.is_empty() {
         return None;
-    }
-
-    if pre_forms.len() > 1 {
-        for p in pre_forms.iter() {
-            if let Ok(NodeSel::Cons(_kl, NodeSel::Cons((_nl, name), _))) = NodeSel::Cons(
-                Atom::Here("include"),
-                NodeSel::Cons(Atom::Here(()), Atom::Here("")),
-            )
-            .select_nodes(p.clone())
-            {
-                if let Some(use_dialect) = KNOWN_DIALECTS.get(&decode_string(&name)) {
-                    return Some(use_dialect.accepted.clone());
+    } else {
+        // Multiple forms in a source file are always module style.
+        // All other forms of chialisp use a single form in a file.
+        if pre_forms.len() > 1 {
+            for p in pre_forms.iter() {
+                if let Ok(NodeSel::Cons(_kl, NodeSel::Cons((_nl, name), _))) = NodeSel::Cons(
+                    Atom::Here("include"),
+                    NodeSel::Cons(Atom::Here(()), Atom::Here("")),
+                )
+                .select_nodes(p.clone())
+                {
+                    if let Some(use_dialect) = KNOWN_DIALECTS.get(&decode_string(&name)) {
+                        return Some(use_dialect.accepted.clone());
+                    }
                 }
             }
-        }
-        return Some(dialect);
-    }
-
-    if let Some(lst) = pre_forms[0].proper_list() {
-        if matches!(lst[0].borrow(), SExp::Cons(_, _, _)) {
             return Some(dialect);
+        }
+
+        if let Some(lst) = pre_forms[0].proper_list() {
+            if matches!(lst[0].borrow(), SExp::Cons(_, _, _)) {
+                return Some(dialect);
+            }
         }
     }
 

@@ -644,3 +644,19 @@ fn test_cache_reuses_cache_data() {
         }],
     );
 }
+
+#[test]
+fn test_unlabeled_module_file() {
+    let filename = "resources/tests/module/unlabeled-module.clsp";
+    let content = fs::read_to_string(filename).expect("file should exist");
+    let hex_file = "resources/tests/module/unlabeled-module.hex";
+    test_compile_and_run_program_with_modules(
+        filename,
+        &content,
+        &[HexArgumentOutcome {
+            hexfile: hex_file,
+            argument: "3",
+            outcome: Run("39"),
+        }],
+    );
+}
