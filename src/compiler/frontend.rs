@@ -1005,9 +1005,17 @@ fn frontend_start(
     pre_forms: &[Rc<SExp>],
 ) -> Result<ModAccum, CompileErr> {
     let top_loc = pre_forms.iter().next().map(|f| f.loc());
-    match parse_toplevel_mod(opts.clone(), top_loc, pre_forms)? {
+    match parse_toplevel_mod(opts.clone(), top_loc.clone(), pre_forms)? {
         ToplevelModParseResult::Mod(tm) => {
             let ls = preprocess(opts.clone(), includes, &tm.forms)?;
+
+            if ls.forms.is_empty() {
+                // Empty mod is illegal.
+                return Err(CompileErr(
+                    top_loc.unwrap_or_else(|| Srcloc::start(&opts.filename())),
+                    "Empty module isn't allowed".to_string(),
+                ));
+            }
 
             let mut ma = ModAccum::new(tm.loc.clone());
             for form in ls.forms.iter().take(ls.forms.len() - 1) {
