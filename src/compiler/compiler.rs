@@ -572,9 +572,6 @@ fn add_inline_hash_for_constant(program: &mut CompileForm, loc: &Srcloc, fun_nam
     let mut new_name = fun_name.to_vec();
     new_name.extend(b"_hash".to_vec());
 
-    let mut underscore_name = new_name.clone();
-    underscore_name.insert(0, b'_');
-
     program.helpers.push(HelperForm::Defun(
         true,
         Box::new(DefunData {
