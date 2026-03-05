@@ -13,7 +13,6 @@ use crate::classic::clvm_tools::stages::stage_0::TRunProgram;
 
 use crate::classic::clvm::__type_compatibility__::Stream;
 use crate::classic::clvm::sexp::sexp_as_bin;
-use crate::compiler::cldb::hex_to_modern_sexp;
 use crate::compiler::clvm::{convert_to_clvm_rs, run, sha256tree, NewStyleIntConversion};
 use crate::compiler::codegen::{codegen, hoist_body_let_binding, process_helper_let_bindings};
 use crate::compiler::comptypes::{
@@ -198,36 +197,6 @@ pub fn find_exported_helper(
         find_helper_target(opts.clone(), &program.helpers, None, fun_name, &parsed_name)?
             .map(|(_, result)| result.clone()),
     )
-}
-
-fn get_hex_name_of_export(
-    opts: Rc<dyn CompilerOpts>,
-    loc: &Srcloc,
-    export: &Export,
-) -> Result<String, CompileErr> {
-    match export {
-        Export::MainProgram(_) => {
-            let mut output_path = PathBuf::from(&opts.filename());
-            output_path.set_extension("hex");
-            Ok(output_path.into_os_string().to_string_lossy().to_string())
-        }
-        Export::Function(desc) => {
-            let use_name = decode_string(&desc.as_name.as_ref().unwrap_or(&desc.name).value);
-            create_hex_output_path(loc.clone(), &opts.filename(), &use_name)
-        }
-    }
-}
-
-fn determine_hex_file_names(
-    opts: Rc<dyn CompilerOpts>,
-    loc: &Srcloc,
-    exports: &[Export],
-) -> Result<Vec<String>, CompileErr> {
-    let mut result = Vec::new();
-    for e in exports.iter() {
-        result.push(get_hex_name_of_export(opts.clone(), loc, e)?);
-    }
-    Ok(result)
 }
 
 fn form_module_program_common_body(
