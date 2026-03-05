@@ -17,6 +17,7 @@ use crate::compiler::comptypes::{
     CompileErr, CompilerOpts, CompilerOutput, HasCompilerOptsDelegation,
 };
 use crate::compiler::dialect::detect_modern;
+use crate::compiler::frontend::frontend;
 use crate::compiler::sexp::{decode_string, enlist, parse_sexp, SExp};
 use crate::compiler::srcloc::Srcloc;
 
@@ -659,4 +660,14 @@ fn test_unlabeled_module_file() {
             outcome: Run("39"),
         }],
     );
+}
+
+#[test]
+fn test_empty_module_file() {
+    let filename = "resources/tests/module/empty.clsp";
+    let opts: Rc<dyn CompilerOpts> = Rc::new(DefaultCompilerOpts::new(filename));
+    assert!(frontend(
+        opts.clone(),
+        &[]
+    ).is_err());
 }
