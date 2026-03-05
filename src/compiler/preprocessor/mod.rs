@@ -232,7 +232,7 @@ fn make_namespace_ref(
 
 pub fn detect_chialisp_module(pre_forms: &[Rc<SExp>]) -> Option<AcceptedDialect> {
     let dialect = KNOWN_DIALECTS
-        .get("*standard-cl-23*")
+        .get("*standard-cl-25*")
         .unwrap()
         .accepted
         .clone();
@@ -240,6 +240,8 @@ pub fn detect_chialisp_module(pre_forms: &[Rc<SExp>]) -> Option<AcceptedDialect>
     if pre_forms.is_empty() {
         return None;
     } else {
+        // Multiple forms in a source file are always module style.
+        // All other forms of chialisp use a single form in a file.
         if pre_forms.len() > 1 {
             for p in pre_forms.iter() {
                 if let Ok(NodeSel::Cons(_kl, NodeSel::Cons((_nl, name), _))) = NodeSel::Cons(
