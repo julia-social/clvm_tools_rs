@@ -596,6 +596,11 @@ impl ModuleImportSpec {
                     name: p,
                     target: None,
                 })));
+            } else {
+                return Err(CompileErr(
+                    forms[0].loc(),
+                    "allowed qualified import forms are (import qualified X) and (import qualified X as Y)".to_string()
+                ));
             }
         }
 
