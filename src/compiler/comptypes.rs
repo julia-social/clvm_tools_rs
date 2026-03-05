@@ -284,17 +284,21 @@ pub enum ConstantKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+/// Specifies a module style name with dotted namespaces such as std.compare.deep_compare .
 pub struct ImportLongName {
     pub components: Vec<Vec<u8>>,
 }
 
 #[derive(Debug, Clone)]
+/// Specifies a type of long name translation to byte string, which is currently only dotted
+/// namespace style.  When module style is added subsequently, Filename(_) will appear.
 pub enum LongNameTranslation {
     Namespace,
     Filename(String),
 }
 
 impl ImportLongName {
+    /// Given a bytewise string that may contain dots, construct an ImportLongName.
     pub fn parse(name: &[u8]) -> (bool, Self) {
         let (relative, skip_words) = if name.starts_with(b".") {
             (true, 1)
@@ -310,6 +314,7 @@ impl ImportLongName {
         (relative, ImportLongName { components })
     }
 
+    /// Render to a string of readable bytes.
     pub fn as_u8_vec(&self, filename: LongNameTranslation) -> Vec<u8> {
         let mut result_vec = vec![];
         let sep = if matches!(filename, LongNameTranslation::Filename(_)) {
@@ -329,33 +334,14 @@ impl ImportLongName {
         result_vec
     }
 
-    pub fn combine(&self, with: &ImportLongName) -> Self {
-        let mut result = self.components.clone();
-        result.extend(with.components.clone());
-        ImportLongName { components: result }
-    }
-
-    /// True if parent namespace contains self.
-    pub fn is_contained_by(&self, parent: &ImportLongName) -> bool {
-        if self.components.len() < parent.components.len() {
-            return false;
-        }
-
-        for (i, p) in parent.components.iter().enumerate() {
-            if self.components[i] != *p {
-                return false;
-            }
-        }
-
-        true
-    }
-
+    /// Add a name that selects a specified child for a given namespace.
     pub fn with_child(&self, name: &[u8]) -> Self {
         let mut result = self.components.clone();
         result.push(name.to_vec());
         ImportLongName { components: result }
     }
 
+    /// Get the parent namespace.
     pub fn parent(&self) -> Option<Self> {
         if self.components.len() < 2 {
             return None;
@@ -371,6 +357,7 @@ impl ImportLongName {
         })
     }
 
+    /// Separate this namespace into parent and child.
     pub fn parent_and_name(&self) -> (Option<Self>, Vec<u8>) {
         if self.components.is_empty() {
             return (None, vec![]);
@@ -391,6 +378,13 @@ impl ImportLongName {
         }
 
         (None, self.components[0].clone())
+    }
+
+    /// Joins the components of the target name to this name.
+    pub fn combine(&self, with: &ImportLongName) -> Self {
+        let mut result = self.components.clone();
+        result.extend(with.components.clone());
+        ImportLongName { components: result }
     }
 }
 
@@ -456,6 +450,20 @@ pub enum ModuleImportSpec {
     Hiding(Srcloc, Vec<ModuleImportListedName>),
 }
 
+fn require_kw_atom(kw: &[u8], sexp: &SExp) -> Result<(), CompileErr> {
+    let matched_as_kw = if let SExp::Atom(_, as_word) = sexp {
+        as_word == kw
+    } else {
+        false
+    };
+
+    if matched_as_kw {
+        return Ok(());
+    }
+
+    Err(CompileErr(sexp.loc(), "'as' keyword expected".to_string()))
+}
+
 pub fn match_as_named(loc: Srcloc, lst: &[SExp], offset: usize) -> Option<ExportFunctionDesc> {
     let name_offset = offset;
     let small = 1 + offset;
@@ -486,14 +494,10 @@ pub fn match_as_named(loc: Srcloc, lst: &[SExp], offset: usize) -> Option<Export
     };
 
     if lst.len() == large {
-        if let SExp::Atom(as_loc, as_atom) = lst[as_kw].borrow() {
-            // Not 'as'
-            if as_atom != b"as" {
-                return None;
-            }
-            result.as_loc = Some(as_loc.clone());
-        } else {
+        if require_kw_atom(b"as", &lst[as_kw]).is_err() {
             return None;
+        } else {
+            result.as_loc = Some(lst[as_kw].loc());
         }
 
         if let SExp::Atom(as_name_loc, as_name) = lst[as_name_offset].borrow() {
@@ -501,10 +505,18 @@ pub fn match_as_named(loc: Srcloc, lst: &[SExp], offset: usize) -> Option<Export
                 value: as_name.clone(),
                 loc: Some(as_name_loc.clone()),
             });
+        } else {
+            // Not an atom to rename to, fail to parse.
+            return None;
         }
     };
 
     Some(result)
+}
+
+enum KwImportKind {
+    ImportHiding,
+    ImportExposing,
 }
 
 impl ModuleImportSpec {
@@ -518,24 +530,24 @@ impl ModuleImportSpec {
 
     pub fn parse(
         loc: Srcloc,
-        kw: Srcloc,
         forms: &[SExp],
-        mut skip: usize,
+        mut import_names_location: usize,
     ) -> Result<Self, CompileErr> {
-        if skip >= forms.len() {
+        if import_names_location >= forms.len() {
             return Ok(ModuleImportSpec::Hiding(loc, vec![]));
         }
 
         // Figure out whether it's "import qualified" or
         // "import qualified foo as bar"
-        let (first_loc, first_atom) = if let SExp::Atom(first_loc, first) = &forms[skip] {
-            (first_loc.clone(), first.clone())
-        } else {
-            return Err(CompileErr(
-                forms[skip].loc(),
-                "import must be followed by a name or 'qualified'".to_string(),
-            ));
-        };
+        let (first_loc, first_atom) =
+            if let SExp::Atom(first_loc, first) = &forms[import_names_location] {
+                (first_loc.clone(), first.clone())
+            } else {
+                return Err(CompileErr(
+                    forms[import_names_location].loc(),
+                    "import must be followed by a name or 'qualified'".to_string(),
+                ));
+            };
 
         if first_atom == b"qualified" {
             if forms.len() < 3 {
@@ -557,6 +569,7 @@ impl ModuleImportSpec {
             let (_, p) = ImportLongName::parse(&second_atom);
 
             if forms.len() == 5 {
+                // Fixed format: import qualified X as Y
                 let qname = if let SExp::Atom(_, qname) = &forms[4] {
                     qname.clone()
                 } else {
@@ -565,6 +578,8 @@ impl ModuleImportSpec {
                         "import qualified ... as qname must be a name".to_string(),
                     ));
                 };
+
+                require_kw_atom(b"as", &forms[3])?;
 
                 let (relative_qual, import_name) = ImportLongName::parse(&qname);
 
@@ -581,62 +596,84 @@ impl ModuleImportSpec {
                     }),
                 })));
             } else if forms.len() == 3 {
+                // Fixed format: import qualified X
                 return Ok(ModuleImportSpec::Qualified(Box::new(QualifiedModuleInfo {
                     loc: loc.clone(),
-                    kw: kw.clone(),
+                    kw: first_loc.clone(),
                     nl: second_loc.clone(),
                     name: p,
                     target: None,
                 })));
+            } else {
+                return Err(CompileErr(
+                    forms[0].loc(),
+                    "allowed qualified import forms are (import qualified X) and (import qualified X as Y)".to_string()
+                ));
             }
         }
 
-        skip += 1;
+        import_names_location += 1;
 
-        if skip >= forms.len() {
+        if import_names_location >= forms.len() {
             return Ok(ModuleImportSpec::Hiding(loc, vec![]));
         }
 
-        if let SExp::Atom(kw_loc, kw) = &forms[skip] {
-            let mut words = vec![];
-            for atom in forms.iter().skip(skip + 1) {
-                if let Some(desc) = atom
-                    .proper_list()
-                    .and_then(|lst| match_as_named(loc.clone(), &lst, 0))
-                {
-                    let import_name_loc = desc.name.loc.clone();
-                    let import_name = desc.name.value.clone();
-                    let export_name = desc.as_name.map(|n| n.value.clone());
-
-                    words.push(ModuleImportListedName {
-                        nl: import_name_loc.unwrap_or_else(|| kw_loc.clone()),
-                        name: import_name,
-                        alias: export_name,
-                    });
-                } else if let SExp::Atom(name_loc, name) = atom {
-                    words.push(ModuleImportListedName {
-                        nl: name_loc.clone(),
-                        name: name.clone(),
-                        alias: None,
-                    });
-                } else {
-                    return Err(CompileErr(
-                        atom.loc(),
-                        "Exposed names must be atoms".to_string(),
-                    ));
+        let (kw_loc, kw_kind) = (|| {
+            if let SExp::Atom(kw_loc, kw) = &forms[import_names_location] {
+                if kw == b"exposing" {
+                    return Ok((kw_loc, KwImportKind::ImportExposing));
+                } else if kw == b"hiding" {
+                    return Ok((kw_loc, KwImportKind::ImportHiding));
                 }
             }
-            if kw == b"exposing" {
-                return Ok(ModuleImportSpec::Exposing(kw_loc.clone(), words));
-            } else if kw == b"hiding" {
-                return Ok(ModuleImportSpec::Hiding(loc, words));
+
+            Err(CompileErr(
+                forms[import_names_location].loc(),
+                format!("Bad keyword {} in import", forms[import_names_location]),
+            ))
+        })()?;
+
+        let mut words = vec![];
+        for atom in forms.iter().skip(import_names_location + 1) {
+            // Ensure that import Foo exposing (bar as baz) is allowed
+            // and that import Foo hiding (bar as baz) is not.
+            if let (Some(desc), KwImportKind::ImportExposing) = (
+                atom.proper_list()
+                    .and_then(|lst| match_as_named(loc.clone(), &lst, 0)),
+                &kw_kind,
+            ) {
+                let import_name_loc = desc.name.loc.clone();
+                let import_name = desc.name.value.clone();
+                let export_name = desc.as_name.map(|n| n.value.clone());
+
+                words.push(ModuleImportListedName {
+                    nl: import_name_loc.unwrap_or_else(|| kw_loc.clone()),
+                    name: import_name,
+                    alias: export_name,
+                });
+            } else if let SExp::Atom(name_loc, name) = atom {
+                words.push(ModuleImportListedName {
+                    nl: name_loc.clone(),
+                    name: name.clone(),
+                    alias: None,
+                });
+            } else if matches!(kw_kind, KwImportKind::ImportHiding) {
+                return Err(CompileErr(
+                    atom.loc(),
+                    "Hiding only allows atoms".to_string(),
+                ));
+            } else {
+                return Err(CompileErr(
+                    atom.loc(),
+                    "Exposed names must be single atoms or rename directives with 'as'".to_string(),
+                ));
             }
         }
 
-        Err(CompileErr(
-            forms[skip].loc(),
-            format!("Bad keyword {} in import", forms[skip]),
-        ))
+        match kw_kind {
+            KwImportKind::ImportExposing => Ok(ModuleImportSpec::Exposing(kw_loc.clone(), words)),
+            KwImportKind::ImportHiding => Ok(ModuleImportSpec::Hiding(kw_loc.clone(), words)),
+        }
     }
 
     pub fn to_sexp(&self) -> Rc<SExp> {

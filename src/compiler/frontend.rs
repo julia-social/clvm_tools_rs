@@ -313,7 +313,7 @@ fn handle_assign_form(
     v: &[SExp],
     inline_hint: Option<LetFormInlineHint>,
 ) -> Result<BodyForm, CompileErr> {
-    if v.len() % 2 == 0 {
+    if v.len().is_multiple_of(2) {
         return Err(CompileErr(
             l,
             "assign form should be in pairs of pattern value followed by an expression".to_string(),
@@ -752,6 +752,8 @@ impl HelperFormResult {
     }
 }
 
+/// Produce a helperform from a namespace.  This acts as a storage container for helpers that
+/// can later be resolved via module resolution.
 pub fn compile_namespace(
     opts: Rc<dyn CompilerOpts>,
     loc: Srcloc,
@@ -794,6 +796,9 @@ pub fn compile_namespace(
     })))
 }
 
+/// Add a namespace reference from an input form.  These specify namespaces to use when adding
+/// helper forms.  A namespaced program is rewritten so that every helper has a fully resolved
+/// name.
 pub fn compile_nsref(loc: Srcloc, internal: &[SExp]) -> Result<HelperForm, CompileErr> {
     if internal.len() < 2 {
         return Err(CompileErr(
@@ -802,12 +807,12 @@ pub fn compile_nsref(loc: Srcloc, internal: &[SExp]) -> Result<HelperForm, Compi
         ));
     }
 
-    let import_spec = ModuleImportSpec::parse(loc.clone(), internal[0].loc(), internal, 1)?;
+    let import_spec = ModuleImportSpec::parse(loc.clone(), internal, 1)?;
     if let ModuleImportSpec::Qualified(q) = &import_spec {
         return Ok(HelperForm::Defnsref(Box::new(NamespaceRefData {
             loc,
             kw: internal[0].loc(),
-            nl: internal[1].loc(),
+            nl: q.nl.clone(),
             rendered_name: q.name.as_u8_vec(LongNameTranslation::Namespace),
             longname: q.name.clone(),
             specification: import_spec.clone(),
@@ -836,6 +841,14 @@ pub fn compile_nsref(loc: Srcloc, internal: &[SExp]) -> Result<HelperForm, Compi
 pub fn compile_helperform(
     opts: Rc<dyn CompilerOpts>,
     body: Rc<SExp>,
+) -> Result<Option<HelperFormResult>, CompileErr> {
+    compile_helperform_mm(opts, body, false)
+}
+
+pub fn compile_helperform_mm(
+    opts: Rc<dyn CompilerOpts>,
+    body: Rc<SExp>,
+    modules: bool,
 ) -> Result<Option<HelperFormResult>, CompileErr> {
     let l = location_span(body.loc(), body.clone());
     let plist = body.proper_list();
@@ -868,7 +881,7 @@ pub fn compile_helperform(
                 new_helpers: vec![definition],
             }))
         } else if matched.op_name == b"defmacro" || is_defmac {
-            if is_defmac {
+            if is_defmac && modules {
                 return Ok(Some(HelperFormResult {
                     new_helpers: vec![],
                 }));
@@ -1102,7 +1115,7 @@ pub fn frontend(
         for form in output_forms.forms.iter() {
             if let Some(export) = match_export_form(opts.clone(), form.clone())? {
                 exports.push(export);
-            } else if let Some(helper) = compile_helperform(opts.clone(), form.clone())? {
+            } else if let Some(helper) = compile_helperform_mm(opts.clone(), form.clone(), true)? {
                 for h in helper.new_helpers.iter() {
                     other_forms.push(h.clone());
                 }
