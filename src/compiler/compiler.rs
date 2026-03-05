@@ -538,108 +538,6 @@ pub fn compile_module(
     })
 }
 
-pub fn try_to_use_existing_hex_outputs(
-    context: &mut BasicCompileContext,
-    opts: Rc<dyn CompilerOpts>,
-    cf: &CompileForm,
-    exports: &[Export],
-) -> Result<Option<CompilerOutput>, CompileErr> {
-    let mut imports: Vec<String> = cf
-        .include_forms
-        .iter()
-        .map(|i| decode_string(&i.name))
-        .collect();
-    imports.push(opts.filename());
-
-    // Get earliest date of any hex file.
-    let hex_files = determine_hex_file_names(opts.clone(), &cf.loc, exports)?;
-    let mut earliest_hex_date: Option<u64> = None;
-    for file in hex_files.iter() {
-        if let Ok(mod_date) = opts.get_file_mod_date(&cf.loc, file) {
-            let should_set = if let Some(hex_date) = earliest_hex_date.as_ref() {
-                *hex_date > mod_date
-            } else {
-                true
-            };
-
-            if should_set {
-                earliest_hex_date = Some(mod_date);
-            }
-        } else {
-            // One of them doesn't exist so we must build.
-            break;
-        }
-    }
-
-    let mut latest_file_date: Option<u64> = None;
-    for file in imports.iter() {
-        if let Ok(mod_date) = opts.get_file_mod_date(&cf.loc, file) {
-            let should_set = if let Some(input_date) = latest_file_date.as_ref() {
-                *input_date < mod_date
-            } else {
-                true
-            };
-
-            if should_set {
-                latest_file_date = Some(mod_date);
-            }
-        } else {
-            // Could not get the mod date of an input.
-            break;
-        }
-    }
-
-    if let (Some(earliest_hex_date), Some(latest_file_date)) = (earliest_hex_date, latest_file_date)
-    {
-        if earliest_hex_date > latest_file_date {
-            let mut summary = Rc::new(SExp::Nil(cf.loc.clone()));
-            let mut components = Vec::new();
-
-            for e in exports.iter() {
-                let hex_file_name = get_hex_name_of_export(opts.clone(), &cf.loc, e)?;
-                let (_, hex_data) = opts.read_new_file(opts.filename(), hex_file_name.clone())?;
-                let loaded_hex_data = hex_to_modern_sexp(
-                    context.allocator(),
-                    &HashMap::new(),
-                    cf.loc.clone(),
-                    &decode_string(&hex_data),
-                )?;
-                let shortname = if let Export::Function(desc) = e {
-                    desc.name.value.clone()
-                } else {
-                    b"program".to_vec()
-                };
-
-                let hash = sha256tree(loaded_hex_data.clone());
-                summary = Rc::new(SExp::Cons(
-                    cf.loc.clone(),
-                    Rc::new(SExp::Cons(
-                        cf.loc.clone(),
-                        Rc::new(SExp::QuotedString(cf.loc.clone(), b'"', shortname.clone())),
-                        Rc::new(SExp::QuotedString(cf.loc.clone(), b'x', hash.clone())),
-                    )),
-                    summary,
-                ));
-
-                components.push(CompileModuleComponent {
-                    shortname,
-                    filename: hex_file_name,
-                    content: loaded_hex_data,
-                    hash,
-                });
-            }
-
-            return Ok(Some(CompilerOutput::Module(CompileModuleOutput {
-                summary,
-                components,
-                includes: cf.include_forms.clone(),
-            })));
-        }
-    }
-
-    Ok(None)
-}
-
 fn form_hash_expression(inner_exp: Rc<BodyForm>) -> Rc<BodyForm> {
     let shloc = Srcloc::start("*sha256tree*");
     let parsed =
@@ -739,12 +637,6 @@ pub fn compile_pre_forms(
             compile_from_compileform(context, opts, p0)?,
         )),
         FrontendOutput::Module(cf, exports) => {
-            if let Some(result) =
-                try_to_use_existing_hex_outputs(context, opts.clone(), &cf, &exports)?
-            {
-                return Ok(result);
-            }
-
             // cl23 always reflects optimization.
             let dialect = opts.dialect();
             let opts = if let Some(stepping) = dialect.stepping.as_ref() {
