@@ -326,13 +326,6 @@ impl ImportLongName {
         result_vec
     }
 
-    /// Joins the components of the target name to this name.
-    pub fn combine(&self, with: &ImportLongName) -> Self {
-        let mut result = self.components.clone();
-        result.extend(with.components.clone());
-        ImportLongName { components: result }
-    }
-
     /// Add a name that selects a specified child for a given namespace.
     pub fn with_child(&self, name: &[u8]) -> Self {
         let mut result = self.components.clone();

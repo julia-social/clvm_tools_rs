@@ -129,12 +129,6 @@ pub fn tour_helpers(helpers: &[HelperForm]) -> TourNamespaces<'_> {
     }
 }
 
-pub fn rename_args_named_helper(
-    pair: (ImportLongName, HelperForm),
-) -> Result<(ImportLongName, HelperForm), CompileErr> {
-    Ok((pair.0.clone(), rename_args_helperform(&pair.1)?))
-}
-
 fn exposed_name_matches(exposed: &ModuleImportListedName, orig_name: &[u8]) -> bool {
     if let Some(alias) = exposed.alias.as_ref() {
         orig_name == alias
