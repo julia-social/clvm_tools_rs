@@ -246,7 +246,7 @@ pub fn detect_chialisp_module(pre_forms: &[Rc<SExp>]) -> Option<AcceptedDialect>
                     Atom::Here("include"),
                     NodeSel::Cons(Atom::Here(()), Atom::Here("")),
                 )
-                    .select_nodes(p.clone())
+                .select_nodes(p.clone())
                 {
                     if let Some(use_dialect) = KNOWN_DIALECTS.get(&decode_string(&name)) {
                         return Some(use_dialect.accepted.clone());
