@@ -571,7 +571,7 @@ pub fn try_from_cache(
 
         let loaded_hex_data =
             // Don't fail on failure to load cache.  We can compile and regenerate.
-            if let Some(lh) = hex_to_modern_sexp(&mut allocator, &HashMap::new(), cf.loc.clone(), &hex_data).ok() {
+            if let Ok(lh) = hex_to_modern_sexp(&mut allocator, &HashMap::new(), cf.loc.clone(), &hex_data) {
                 lh
             } else {
                 return Ok(None);
