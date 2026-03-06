@@ -114,16 +114,6 @@ pub fn create_prim_map() -> Rc<HashMap<Vec<u8>, Rc<SExp>>> {
     Rc::new(prim_map)
 }
 
-pub fn desugar_frontend(
-    context: &mut BasicCompileContext,
-    opts: Rc<dyn CompilerOpts>,
-    p0: CompileForm,
-) -> Result<CompileForm, CompileErr> {
-    let p1 = context.frontend_optimization(opts.clone(), p0)?;
-
-    do_desugar(&p1)
-}
-
 pub fn do_desugar(program: &CompileForm) -> Result<CompileForm, CompileErr> {
     // Transform let bindings, merging nested let scopes with the top namespace
     let hoisted_bindings = hoist_body_let_binding(None, program.args.clone(), program.exp.clone())?;
@@ -371,14 +361,22 @@ pub fn compile_module(
             let hex_data = stream.get_value().hex();
             set_cache_element(opts.clone(), &program, &output_path_str, &hex_data);
             opts.write_new_file(&output_path_str, hex_data.as_bytes())?;
+
+            let (hash, summary) = compute_export_summary(
+                loc.clone(),
+                Rc::new(SExp::Nil(loc.clone())),
+                b"program",
+                output.clone(),
+            );
+
             return Ok(CompileModuleOutput {
-                summary: Rc::new(SExp::Nil(loc.clone())),
+                summary,
                 includes: program.include_forms.clone(),
                 components: vec![CompileModuleComponent {
                     shortname: b"program".to_vec(),
                     filename: output_path_str,
                     content: output.clone(),
-                    hash: sha256tree(output),
+                    hash,
                 }],
             });
         }
@@ -532,6 +530,27 @@ pub fn compile_module(
     })
 }
 
+fn compute_export_summary(
+    loc: Srcloc,
+    list_tail: Rc<SExp>,
+    shortname: &[u8],
+    program_code: Rc<SExp>,
+) -> (Vec<u8>, Rc<SExp>) {
+    let hash = sha256tree(program_code);
+    (
+        hash.clone(),
+        Rc::new(SExp::Cons(
+            loc.clone(),
+            Rc::new(SExp::Cons(
+                loc.clone(),
+                Rc::new(SExp::QuotedString(loc.clone(), b'"', shortname.to_vec())),
+                Rc::new(SExp::QuotedString(loc, b'x', hash)),
+            )),
+            list_tail,
+        )),
+    )
+}
+
 pub fn try_from_cache(
     opts: Rc<dyn CompilerOpts>,
     cf: &CompileForm,
@@ -551,7 +570,13 @@ pub fn try_from_cache(
         };
 
         let loaded_hex_data =
-            hex_to_modern_sexp(&mut allocator, &HashMap::new(), cf.loc.clone(), &hex_data)?;
+            // Don't fail on failure to load cache.  We can compile and regenerate.
+            if let Ok(lh) = hex_to_modern_sexp(&mut allocator, &HashMap::new(), cf.loc.clone(), &hex_data) {
+                lh
+            } else {
+                return Ok(None);
+            };
+
         data_to_write.push((hex_file_name.clone(), hex_data.clone()));
 
         let shortname = if let Export::Function(desc) = e {
@@ -560,16 +585,9 @@ pub fn try_from_cache(
             b"program".to_vec()
         };
 
-        let hash = sha256tree(loaded_hex_data.clone());
-        summary = Rc::new(SExp::Cons(
-            cf.loc.clone(),
-            Rc::new(SExp::Cons(
-                cf.loc.clone(),
-                Rc::new(SExp::QuotedString(cf.loc.clone(), b'"', shortname.clone())),
-                Rc::new(SExp::QuotedString(cf.loc.clone(), b'x', hash.clone())),
-            )),
-            summary,
-        ));
+        let (hash, new_summary) =
+            compute_export_summary(cf.loc(), summary, &shortname, loaded_hex_data.clone());
+        summary = new_summary;
 
         components.push(CompileModuleComponent {
             shortname,
@@ -679,9 +697,6 @@ fn capture_standalone_constants(
 fn add_inline_hash_for_constant(program: &mut CompileForm, loc: &Srcloc, fun_name: &[u8]) {
     let mut new_name = fun_name.to_vec();
     new_name.extend(b"_hash".to_vec());
-
-    let mut underscore_name = new_name.clone();
-    underscore_name.insert(0, b'_');
 
     program.helpers.push(HelperForm::Defun(
         true,
