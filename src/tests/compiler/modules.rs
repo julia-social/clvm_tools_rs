@@ -83,7 +83,6 @@ impl HasCompilerOptsDelegation for TestModuleCompilerOpts {
         inc_from: String,
         filename: String,
     ) -> Result<(String, Vec<u8>), CompileErr> {
-        eprintln!("filename {filename}");
         let rfcell: &RefCell<HashMap<String, Vec<u8>>> = self.written_files.borrow();
         let rf: &HashMap<String, Vec<u8>> = &rfcell.borrow();
         if let Some(content) = rf.get(&filename) {
