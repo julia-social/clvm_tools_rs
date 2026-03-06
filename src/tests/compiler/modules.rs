@@ -666,8 +666,5 @@ fn test_unlabeled_module_file() {
 fn test_empty_module_file() {
     let filename = "resources/tests/module/empty.clsp";
     let opts: Rc<dyn CompilerOpts> = Rc::new(DefaultCompilerOpts::new(filename));
-    assert!(frontend(
-        opts.clone(),
-        &[]
-    ).is_err());
+    assert!(frontend(opts.clone(), &[]).is_err());
 }

@@ -230,15 +230,21 @@ fn make_namespace_ref(
     }))
 }
 
-pub fn detect_chialisp_module(pre_forms: &[Rc<SExp>]) -> Option<AcceptedDialect> {
-    let dialect = KNOWN_DIALECTS
-        .get("*standard-cl-25*")
-        .unwrap()
-        .accepted
-        .clone();
+pub fn detect_chialisp_module(
+    loc: Srcloc,
+    pre_forms: &[Rc<SExp>],
+) -> Result<Option<AcceptedDialect>, CompileErr> {
+    let dialect = if let Some(d) = KNOWN_DIALECTS.get("*standard-cl-25*") {
+        d.accepted.clone()
+    } else {
+        return Err(CompileErr(
+            loc.clone(),
+            "internal error: default module dialect not found while compiling!".to_string(),
+        ));
+    };
 
     if pre_forms.is_empty() {
-        return None;
+        return Ok(None);
     } else {
         // Multiple forms in a source file are always module style.
         // All other forms of chialisp use a single form in a file.
@@ -251,29 +257,30 @@ pub fn detect_chialisp_module(pre_forms: &[Rc<SExp>]) -> Option<AcceptedDialect>
                 .select_nodes(p.clone())
                 {
                     if let Some(use_dialect) = KNOWN_DIALECTS.get(&decode_string(&name)) {
-                        return Some(use_dialect.accepted.clone());
+                        return Ok(Some(use_dialect.accepted.clone()));
                     }
                 }
             }
-            return Some(dialect);
+            return Ok(Some(dialect));
         }
 
         if let Some(lst) = pre_forms[0].proper_list() {
             if matches!(lst[0].borrow(), SExp::Cons(_, _, _)) {
-                return Some(dialect);
+                return Ok(Some(dialect));
             }
         }
     }
 
-    None
+    Ok(None)
 }
 
 #[test]
 pub fn test_detect_chialisp_module_classic() {
     let filename = "resources/tests/module/programs/classic.clsp";
     let content = "(mod (X) (* X 13))";
-    let parsed = parse_sexp(Srcloc::start(filename), content.bytes()).expect("should parse");
-    assert!(detect_chialisp_module(&parsed).is_none());
+    let loc = Srcloc::start(filename);
+    let parsed = parse_sexp(loc.clone(), content.bytes()).expect("should parse");
+    assert!(detect_chialisp_module(loc, &parsed).unwrap().is_none());
 }
 
 #[derive(Debug)]
@@ -474,7 +481,7 @@ impl Preprocessor {
         let runner = Rc::new(DefaultProgramRunner::new());
         let pre_forms = parse_sexp(srcloc.clone(), content.iter().copied())?;
         let (have_module, dialect, classic_parse) =
-            if let Some(dialect) = detect_chialisp_module(&pre_forms) {
+            if let Some(dialect) = detect_chialisp_module(Srcloc::start(filename), &pre_forms)? {
                 (true, dialect, NodePtr::NIL)
             } else {
                 let classic_parse = assemble(&mut allocator, &program_text).map_err(|_| {

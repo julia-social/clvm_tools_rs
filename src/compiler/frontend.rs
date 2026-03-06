@@ -1098,7 +1098,7 @@ pub fn frontend(
 ) -> Result<FrontendOutput, CompileErr> {
     let mut includes = Vec::new();
 
-    if let Some(_dialect) = detect_chialisp_module(pre_forms) {
+    if let Some(_dialect) = detect_chialisp_module(Srcloc::start(&opts.filename()), pre_forms)? {
         let mut other_forms = vec![];
         let mut exports = vec![];
 
