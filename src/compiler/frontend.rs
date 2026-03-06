@@ -807,12 +807,12 @@ pub fn compile_nsref(loc: Srcloc, internal: &[SExp]) -> Result<HelperForm, Compi
         ));
     }
 
-    let import_spec = ModuleImportSpec::parse(loc.clone(), internal[0].loc(), internal, 1)?;
+    let import_spec = ModuleImportSpec::parse(loc.clone(), internal, 1)?;
     if let ModuleImportSpec::Qualified(q) = &import_spec {
         return Ok(HelperForm::Defnsref(Box::new(NamespaceRefData {
             loc,
             kw: internal[0].loc(),
-            nl: internal[1].loc(),
+            nl: q.nl.clone(),
             rendered_name: q.name.as_u8_vec(LongNameTranslation::Namespace),
             longname: q.name.clone(),
             specification: import_spec.clone(),
@@ -1018,9 +1018,17 @@ fn frontend_start(
     pre_forms: &[Rc<SExp>],
 ) -> Result<ModAccum, CompileErr> {
     let top_loc = pre_forms.iter().next().map(|f| f.loc());
-    match parse_toplevel_mod(opts.clone(), top_loc, pre_forms)? {
+    match parse_toplevel_mod(opts.clone(), top_loc.clone(), pre_forms)? {
         ToplevelModParseResult::Mod(tm) => {
             let ls = preprocess(opts.clone(), includes, &tm.forms)?;
+
+            if ls.forms.is_empty() {
+                // Empty mod is illegal.
+                return Err(CompileErr(
+                    top_loc.unwrap_or_else(|| Srcloc::start(&opts.filename())),
+                    "Empty module isn't allowed".to_string(),
+                ));
+            }
 
             let mut ma = ModAccum::new(tm.loc.clone());
             for form in ls.forms.iter().take(ls.forms.len() - 1) {
@@ -1090,7 +1098,7 @@ pub fn frontend(
 ) -> Result<FrontendOutput, CompileErr> {
     let mut includes = Vec::new();
 
-    if let Some(_dialect) = detect_chialisp_module(pre_forms) {
+    if let Some(_dialect) = detect_chialisp_module(Srcloc::start(&opts.filename()), pre_forms)? {
         let mut other_forms = vec![];
         let mut exports = vec![];
 

@@ -1,15 +1,8 @@
 use std::rc::Rc;
-use std::thread::sleep;
-use std::time::Duration;
 
 use crate::compiler::clvm::sha256tree_from_atom;
 use crate::compiler::comptypes::{CompileErr, CompileForm, CompilerOpts};
 use crate::compiler::sexp::decode_string;
-
-const MAX_CACHE_TRIES: usize = 3;
-lazy_static! {
-    pub static ref RETRY_WAIT: Duration = Duration::new(1, 0);
-}
 
 fn cache_key(cf: &CompileForm) -> String {
     let mut include_fingerprints = Vec::new();
@@ -39,24 +32,9 @@ pub fn try_element_from_cache(
 ) -> Option<String> {
     let key = cache_key(cf);
     let hex_file_name = format!(".chialisp/{key}/{export_path}");
-    for _ in 0..MAX_CACHE_TRIES {
-        let result = opts
-            .read_new_file(cf.loc().file.to_string(), hex_file_name.clone())
-            .ok()
-            .map(|data| decode_string(&data.1))?;
-
-        // Hex files are never empty.  Even the nil is one byte.
-        if !result.is_empty() {
-            return Some(result);
-        }
-
-        // We read the file after its creation but before it had content.  Wait a bit and try
-        // again.
-        sleep(*RETRY_WAIT);
-    }
-
-    // Couldn't make sense of it.
-    None
+    opts.read_new_file(cf.loc().file.to_string(), hex_file_name.clone())
+        .ok()
+        .map(|data| decode_string(&data.1))
 }
 
 pub fn set_cache_element_error(

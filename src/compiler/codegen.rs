@@ -999,7 +999,7 @@ fn fail_if_present<T, R>(
 fn filter_env(used: &[Vec<u8>], nil: Rc<SExp>, env: Rc<SExp>) -> Rc<SExp> {
     match env.atomize() {
         SExp::Atom(_l, n) => {
-            if used.iter().any(|u| *u != n) {
+            if used.iter().all(|u| *u != n) {
                 return nil.clone();
             }
             env

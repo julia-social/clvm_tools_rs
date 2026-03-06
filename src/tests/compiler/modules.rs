@@ -17,6 +17,7 @@ use crate::compiler::comptypes::{
     CompileErr, CompilerOpts, CompilerOutput, HasCompilerOptsDelegation,
 };
 use crate::compiler::dialect::detect_modern;
+use crate::compiler::frontend::frontend;
 use crate::compiler::sexp::{decode_string, enlist, parse_sexp, SExp};
 use crate::compiler::srcloc::Srcloc;
 
@@ -82,7 +83,6 @@ impl HasCompilerOptsDelegation for TestModuleCompilerOpts {
         inc_from: String,
         filename: String,
     ) -> Result<(String, Vec<u8>), CompileErr> {
-        eprintln!("filename {filename}");
         let rfcell: &RefCell<HashMap<String, Vec<u8>>> = self.written_files.borrow();
         let rf: &HashMap<String, Vec<u8>> = &rfcell.borrow();
         if let Some(content) = rf.get(&filename) {
@@ -678,4 +678,27 @@ fn test_three_outputs_common() {
             },
         ],
     );
+}
+
+#[test]
+fn test_unlabeled_module_file() {
+    let filename = "resources/tests/module/unlabeled-module.clsp";
+    let content = fs::read_to_string(filename).expect("file should exist");
+    let hex_file = "resources/tests/module/unlabeled-module.hex";
+    test_compile_and_run_program_with_modules(
+        filename,
+        &content,
+        &[HexArgumentOutcome {
+            hexfile: hex_file,
+            argument: "3",
+            outcome: Run("39"),
+        }],
+    );
+}
+
+#[test]
+fn test_empty_module_file() {
+    let filename = "resources/tests/module/empty.clsp";
+    let opts: Rc<dyn CompilerOpts> = Rc::new(DefaultCompilerOpts::new(filename));
+    assert!(frontend(opts.clone(), &[]).is_err());
 }
