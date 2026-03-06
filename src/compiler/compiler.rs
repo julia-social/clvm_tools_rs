@@ -361,14 +361,22 @@ pub fn compile_module(
             let hex_data = stream.get_value().hex();
             set_cache_element(opts.clone(), &program, &output_path_str, &hex_data);
             opts.write_new_file(&output_path_str, hex_data.as_bytes())?;
+
+            let (hash, summary) = compute_export_summary(
+                loc.clone(),
+                Rc::new(SExp::Nil(loc.clone())),
+                b"program",
+                output.clone(),
+            );
+
             return Ok(CompileModuleOutput {
-                summary: Rc::new(SExp::Nil(loc.clone())),
+                summary,
                 includes: program.include_forms.clone(),
                 components: vec![CompileModuleComponent {
                     shortname: b"program".to_vec(),
                     filename: output_path_str,
                     content: output.clone(),
-                    hash: sha256tree(output),
+                    hash,
                 }],
             });
         }
@@ -522,6 +530,27 @@ pub fn compile_module(
     })
 }
 
+fn compute_export_summary(
+    loc: Srcloc,
+    list_tail: Rc<SExp>,
+    shortname: &[u8],
+    program_code: Rc<SExp>,
+) -> (Vec<u8>, Rc<SExp>) {
+    let hash = sha256tree(program_code);
+    (
+        hash.clone(),
+        Rc::new(SExp::Cons(
+            loc.clone(),
+            Rc::new(SExp::Cons(
+                loc.clone(),
+                Rc::new(SExp::QuotedString(loc.clone(), b'"', shortname.to_vec())),
+                Rc::new(SExp::QuotedString(loc, b'x', hash)),
+            )),
+            list_tail,
+        )),
+    )
+}
+
 pub fn try_from_cache(
     opts: Rc<dyn CompilerOpts>,
     cf: &CompileForm,
@@ -541,7 +570,13 @@ pub fn try_from_cache(
         };
 
         let loaded_hex_data =
-            hex_to_modern_sexp(&mut allocator, &HashMap::new(), cf.loc.clone(), &hex_data)?;
+            // Don't fail on failure to load cache.  We can compile and regenerate.
+            if let Some(lh) = hex_to_modern_sexp(&mut allocator, &HashMap::new(), cf.loc.clone(), &hex_data).ok() {
+                lh
+            } else {
+                return Ok(None);
+            };
+
         data_to_write.push((hex_file_name.clone(), hex_data.clone()));
 
         let shortname = if let Export::Function(desc) = e {
@@ -550,16 +585,9 @@ pub fn try_from_cache(
             b"program".to_vec()
         };
 
-        let hash = sha256tree(loaded_hex_data.clone());
-        summary = Rc::new(SExp::Cons(
-            cf.loc.clone(),
-            Rc::new(SExp::Cons(
-                cf.loc.clone(),
-                Rc::new(SExp::QuotedString(cf.loc.clone(), b'"', shortname.clone())),
-                Rc::new(SExp::QuotedString(cf.loc.clone(), b'x', hash.clone())),
-            )),
-            summary,
-        ));
+        let (hash, new_summary) =
+            compute_export_summary(cf.loc(), summary, &shortname, loaded_hex_data.clone());
+        summary = new_summary;
 
         components.push(CompileModuleComponent {
             shortname,
