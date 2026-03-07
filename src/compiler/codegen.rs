@@ -942,7 +942,7 @@ fn get_function_cache_key(
     sha256tree(hashable)
 }
 
-pub fn codegen_(
+fn codegen_(
     context: &mut BasicCompileContext,
     opts: Rc<dyn CompilerOpts>,
     compiler: &PrimaryCodegen,
