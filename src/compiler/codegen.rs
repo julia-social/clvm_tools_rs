@@ -855,10 +855,10 @@ fn filter_env(used: &[Vec<u8>], nil: Rc<SExp>, env: Rc<SExp>) -> Rc<SExp> {
         SExp::Cons(l, a, b) => {
             let new_a = filter_env(used, nil.clone(), a.clone());
             let new_b = filter_env(used, nil.clone(), b.clone());
-            let old_a_ptr = &*a;
-            let old_b_ptr = &*b;
-            let new_a_ptr = &*new_a;
-            let new_b_ptr = &*new_b;
+            let old_a_ptr: *const SExp = &*a;
+            let old_b_ptr: *const SExp = &*b;
+            let new_a_ptr: *const SExp = &*new_a;
+            let new_b_ptr: *const SExp = &*new_b;
             if old_a_ptr == new_a_ptr && old_b_ptr == new_b_ptr {
                 return env;
             }
