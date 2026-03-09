@@ -48,14 +48,18 @@ fn compile_program_get_result(
         HashMap::new(),
         get_optimizer(&loc, opts.clone())?,
     );
-    let dependency_graph =
-        FunctionDependencyGraph::new_with_options(
-            &desugared,
-            DepgraphOptions {
-                with_constants: true,
-            },
-        );
-    let generated = codegen(&mut context, opts.clone(), Some(&dependency_graph), &desugared)?;
+    let dependency_graph = FunctionDependencyGraph::new_with_options(
+        &desugared,
+        DepgraphOptions {
+            with_constants: true,
+        },
+    );
+    let generated = codegen(
+        &mut context,
+        opts.clone(),
+        Some(&dependency_graph),
+        &desugared,
+    )?;
     run(
         &mut context.allocator,
         context.runner.clone(),

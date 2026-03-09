@@ -27,9 +27,9 @@ use crate::compiler::prims::{primapply, primcons, primquote};
 use crate::compiler::runtypes::RunFailure;
 use crate::compiler::sexp::{decode_string, printable, SExp};
 use crate::compiler::srcloc::Srcloc;
+use crate::compiler::FunctionEntry;
 use crate::compiler::StartOfCodegenOptimization;
 use crate::compiler::{BasicCompileContext, CompileContextWrapper};
-use crate::compiler::FunctionEntry;
 use crate::util::{toposort, u8_from_number, TopoSortItem};
 
 const MACRO_TIME_LIMIT: usize = 1000000;
@@ -927,8 +927,7 @@ fn get_function_cache_key(
     helper: &HelperForm,
 ) -> Vec<u8> {
     let mut depends_on_set = HashSet::new();
-    dependency_graph
-        .get_full_depends_on(&mut depends_on_set, helper.name());
+    dependency_graph.get_full_depends_on(&mut depends_on_set, helper.name());
     let mut depends_on: Vec<_> = depends_on_set.into_iter().collect();
     depends_on.sort();
     // Collect depended on function forms
@@ -1826,7 +1825,13 @@ pub fn codegen(
     let to_process = code_generator.to_process.clone();
 
     for f in to_process {
-        code_generator = codegen_(context, opts.clone(), dependency_graph.clone(), &code_generator, &f)?;
+        code_generator = codegen_(
+            context,
+            opts.clone(),
+            dependency_graph.clone(),
+            &code_generator,
+            &f,
+        )?;
     }
 
     // If stepping 23 or greater, we support no-env mode.
