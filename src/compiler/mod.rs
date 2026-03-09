@@ -45,7 +45,6 @@ use crate::classic::clvm_tools::stages::stage_0::TRunProgram;
 use crate::compiler::comptypes::{
     BodyForm, CompileErr, CompileForm, CompilerOpts, DefunData, HelperForm, PrimaryCodegen,
 };
-use crate::compiler::optimize::depgraph::{DepgraphOptions, FunctionDependencyGraph};
 use crate::compiler::optimize::Optimization;
 use crate::compiler::sexp::SExp;
 
@@ -57,19 +56,12 @@ pub struct FunctionEntry {
 
 pub struct Funcache {
     pub function_outputs: HashMap<Vec<u8>, FunctionEntry>,
-    pub dependency_graph: FunctionDependencyGraph,
 }
 
 impl Funcache {
-    pub fn new(cf: &CompileForm) -> Self {
+    pub fn new() -> Self {
         Funcache {
             function_outputs: HashMap::new(),
-            dependency_graph: FunctionDependencyGraph::new_with_options(
-                cf,
-                DepgraphOptions {
-                    with_constants: true,
-                },
-            ),
         }
     }
 }
@@ -83,6 +75,9 @@ pub struct BasicCompileContext {
     pub optimizer: Box<dyn Optimization>,
     /// Given the operative environment and a serialization of the helper, this is the generated
     /// code from that helper.
+    ///
+    /// Since this is for speeding up optimization-time work, generation of the dependency graph
+    /// must follow desugaring.
     pub funcache: Option<Funcache>,
 }
 

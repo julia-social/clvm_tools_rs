@@ -22,13 +22,14 @@ use crate::compiler::frontend::{compile_bodyform, make_provides_set};
 use crate::compiler::gensym::gensym;
 use crate::compiler::inline::{replace_in_inline, synthesize_args};
 use crate::compiler::lambda::lambda_codegen;
+use crate::compiler::optimize::depgraph::FunctionDependencyGraph;
 use crate::compiler::prims::{primapply, primcons, primquote};
 use crate::compiler::runtypes::RunFailure;
 use crate::compiler::sexp::{decode_string, printable, SExp};
 use crate::compiler::srcloc::Srcloc;
 use crate::compiler::StartOfCodegenOptimization;
 use crate::compiler::{BasicCompileContext, CompileContextWrapper};
-use crate::compiler::{Funcache, FunctionEntry};
+use crate::compiler::FunctionEntry;
 use crate::util::{toposort, u8_from_number, TopoSortItem};
 
 const MACRO_TIME_LIMIT: usize = 1000000;
@@ -645,7 +646,7 @@ pub fn do_mod_codegen(
         &mut throwaway_symbols,
         optimizer,
     );
-    let code = codegen(&mut context_wrapper.context, without_env, program)?;
+    let code = codegen(&mut context_wrapper.context, without_env, None, program)?;
     Ok(CompiledCode(
         program.loc.clone(),
         Rc::new(SExp::Cons(
@@ -922,11 +923,11 @@ fn get_depended_on_forms(
 
 fn get_function_cache_key(
     compiler: &PrimaryCodegen,
-    fc: &Funcache,
+    dependency_graph: &FunctionDependencyGraph,
     helper: &HelperForm,
 ) -> Vec<u8> {
     let mut depends_on_set = HashSet::new();
-    fc.dependency_graph
+    dependency_graph
         .get_full_depends_on(&mut depends_on_set, helper.name());
     let mut depends_on: Vec<_> = depends_on_set.into_iter().collect();
     depends_on.sort();
@@ -945,6 +946,7 @@ fn get_function_cache_key(
 fn codegen_(
     context: &mut BasicCompileContext,
     opts: Rc<dyn CompilerOpts>,
+    dependency_graph: Option<&FunctionDependencyGraph>,
     compiler: &PrimaryCodegen,
     h: &HelperForm,
 ) -> Result<PrimaryCodegen, CompileErr> {
@@ -962,10 +964,9 @@ fn codegen_(
                     },
                 ))
             } else {
-                let cache_key = context
-                    .funcache
+                let cache_key = dependency_graph
                     .as_ref()
-                    .map(|fc| get_function_cache_key(compiler, fc, h));
+                    .map(|d| get_function_cache_key(compiler, d, h));
 
                 if let Some(code) = cache_key.as_ref().and_then(|key| {
                     context
@@ -1779,6 +1780,7 @@ fn dummy_functions(compiler: &PrimaryCodegen) -> Result<PrimaryCodegen, CompileE
 pub fn codegen(
     context: &mut BasicCompileContext,
     opts: Rc<dyn CompilerOpts>,
+    dependency_graph: Option<&FunctionDependencyGraph>,
     cmod: &CompileForm,
 ) -> Result<SExp, CompileErr> {
     let mut start_of_codegen_optimization = StartOfCodegenOptimization {
@@ -1824,7 +1826,7 @@ pub fn codegen(
     let to_process = code_generator.to_process.clone();
 
     for f in to_process {
-        code_generator = codegen_(context, opts.clone(), &code_generator, &f)?;
+        code_generator = codegen_(context, opts.clone(), dependency_graph.clone(), &code_generator, &f)?;
     }
 
     // If stepping 23 or greater, we support no-env mode.
