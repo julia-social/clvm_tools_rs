@@ -682,7 +682,6 @@ pub fn try_from_cache(
             if let Some(hd) = try_element_from_cache(opts.clone(), cf, &hex_file_name) {
                 hd
             } else {
-                // t.ttyell(&format!("missing cache element {hex_file_name}"));
                 return Ok(None);
             }
         };
