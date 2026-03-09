@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::rc::Rc;
 
 use crate::compiler::codegen::codegen;
-use crate::compiler::optimize::depgraph::{DepgraphKind, FunctionDependencyGraph};
+use crate::compiler::optimize::depgraph::{DepgraphKind, DepgraphOptions, FunctionDependencyGraph};
 use crate::compiler::optimize::{sexp_scale, SyntheticType};
 use crate::compiler::{
     BasicCompileContext, CompileErr, CompileForm, CompilerOpts, Funcache, HelperForm,
@@ -60,10 +60,14 @@ pub fn deinline_opt(
         context.funcache = Some(Funcache::default());
     }
 
-    let depgraph = FunctionDependencyGraph::new(&compileform);
+    let depgraph = FunctionDependencyGraph::new_with_options(
+        &compileform,
+        DepgraphOptions {
+            with_constants: true,
+        },
+    );
 
     let mut best_compileform = compileform.clone();
-
     let generated_program = codegen(context, opts.clone(), Some(&depgraph), &best_compileform)?;
     let mut metric = sexp_scale(&generated_program);
     let is_module_compile = opts.module_phase().is_some();
@@ -245,7 +249,8 @@ pub fn deinline_opt(
                     continue;
                 }
 
-                let maybe_smaller_program = codegen(context, opts.clone(), Some(&depgraph), &compileform)?;
+                let maybe_smaller_program =
+                    codegen(context, opts.clone(), Some(&depgraph), &compileform)?;
                 let new_metric = sexp_scale(&maybe_smaller_program);
 
                 // Don't keep this change if it made things worse.

@@ -22,7 +22,7 @@ use crate::compiler::frontend::{compile_bodyform, make_provides_set};
 use crate::compiler::gensym::gensym;
 use crate::compiler::inline::{replace_in_inline, synthesize_args};
 use crate::compiler::lambda::lambda_codegen;
-use crate::compiler::optimize::depgraph::FunctionDependencyGraph;
+use crate::compiler::optimize::depgraph::{DepgraphOptions, FunctionDependencyGraph};
 use crate::compiler::prims::{primapply, primcons, primquote};
 use crate::compiler::runtypes::RunFailure;
 use crate::compiler::sexp::{decode_string, printable, SExp};
@@ -2414,13 +2414,8 @@ fn dummy_functions(compiler: &PrimaryCodegen) -> Result<PrimaryCodegen, CompileE
 fn do_start_codegen_optimization_and_dead_code_elimination(
     context: &mut BasicCompileContext,
     opts: Rc<dyn CompilerOpts>,
-    cmod: &CompileForm,
+    mut start_of_codegen_optimization: StartOfCodegenOptimization,
 ) -> Result<StartOfCodegenOptimization, CompileErr> {
-    let mut start_of_codegen_optimization = StartOfCodegenOptimization {
-        program: cmod.clone(),
-        code_generator: dummy_functions(&start_codegen(context, opts.clone(), cmod.clone())?)?,
-    };
-
     // This is a tree-shaking loop.  It results in the minimum number of emitted
     // helpers in the environment by taking only those still alive after each
     // optimization pass.  If a function is constant at all call sites, then

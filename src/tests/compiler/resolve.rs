@@ -60,16 +60,6 @@ fn compile_program_get_result(
         Some(&dependency_graph),
         &desugared,
     )?;
-=======
-    let dependency_graph =
-        FunctionDependencyGraph::new_with_options(
-            &desugared,
-            DepgraphOptions {
-                with_constants: true,
-            },
-        );
-    let generated = codegen(&mut context, opts.clone(), Some(&dependency_graph), &desugared)?;
->>>>>>> a81f523b (Move dependency graph so we can let the caller ensure it aligns with the provided compileform.  This eliminates the possibility of the context containing a stale dependency graph.)
     run(
         &mut context.allocator,
         context.runner.clone(),

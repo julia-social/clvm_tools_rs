@@ -397,15 +397,6 @@ fn test_codegen_function_cache() {
         )
         .unwrap(),
     );
-=======
-    let generated_diff_c =
-        Rc::new(codegen(&mut context, opts.clone(), Some(&dependency_graph), &constant_diff_program).unwrap());
-
-    // Clobber cache and generate again so we can see exactly what was generated.
-    context.funcache = Some(Funcache::new());
-    let generated_diff_c_clean =
-        Rc::new(codegen(&mut context, opts.clone(), Some(&dependency_graph), &constant_diff_program).unwrap());
->>>>>>> a81f523b (Move dependency graph so we can let the caller ensure it aligns with the provided compileform.  This eliminates the possibility of the context containing a stale dependency graph.)
     let generated_diff_c_map_clean = context.funcache.as_ref().unwrap().function_outputs.clone();
     assert_eq!(generated_diff_c, generated_diff_c_clean);
 
