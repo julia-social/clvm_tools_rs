@@ -152,7 +152,7 @@ pub fn finish_compilation(
     let p3 = context.post_desugar_optimization(opts.clone(), p2)?;
 
     // generate code from AST, optionally with optimization
-    let generated = codegen(context, opts.clone(), &p3)?;
+    let generated = codegen(context, opts.clone(), None, &p3)?;
 
     let g2 = context.post_codegen_output_optimize(opts, generated)?;
 
@@ -678,12 +678,10 @@ pub fn try_from_cache(
 
     for e in exports.iter() {
         let hex_file_name = { get_hex_name_of_export(opts.clone(), &cf.loc(), e) }?;
-        let hex_data = {
-            if let Some(hd) = try_element_from_cache(opts.clone(), cf, &hex_file_name) {
-                hd
-            } else {
-                return Ok(None);
-            }
+        let hex_data = if let Some(hd) = try_element_from_cache(opts.clone(), cf, &hex_file_name) {
+            hd
+        } else {
+            return Ok(None);
         };
 
         let loaded_hex_data =
@@ -713,8 +711,6 @@ pub fn try_from_cache(
             hash,
         });
     }
-
-    // t.ttyell(&format!("cache hit {}", opts.filename()));
 
     // if we got here, then we loaded all exports.
     // write (or rewrite) any hex files that were outputs of the elided build steps.

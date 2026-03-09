@@ -15,6 +15,7 @@ use crate::compiler::comptypes::{
 use crate::compiler::dialect::AcceptedDialect;
 use crate::compiler::frontend::frontend;
 use crate::compiler::optimize::above22::Strategy23;
+use crate::compiler::optimize::depgraph::{DepgraphOptions, FunctionDependencyGraph};
 use crate::compiler::rename::rename_args_compileform;
 use crate::compiler::sexp::{decode_string, parse_sexp, SExp};
 use crate::compiler::srcloc::Srcloc;
@@ -176,10 +177,10 @@ fn test_codegen_function_cache() {
         Box::new(Strategy23 {}),
     );
 
-    // This enables caching.
-    context.funcache = Some(Funcache::new(&compileform));
-
     let mut desugared = do_desugar(opts.clone(), &compileform).unwrap();
+
+    // This enables caching.
+    context.funcache = Some(Funcache::default());
 
     // Set the constant CC to not be tabled so we can test inlined constant changes.
     transform_helper(&mut desugared, |h| {
@@ -191,7 +192,22 @@ fn test_codegen_function_cache() {
 
     eprintln!("compileform {}", desugared.to_sexp());
 
-    let base_generated = Rc::new(codegen(&mut context, opts.clone(), &desugared).unwrap());
+    let dependency_graph = FunctionDependencyGraph::new_with_options(
+        &desugared,
+        DepgraphOptions {
+            with_constants: true,
+        },
+    );
+
+    let base_generated = Rc::new(
+        codegen(
+            &mut context,
+            opts.clone(),
+            Some(&dependency_graph),
+            &desugared,
+        )
+        .unwrap(),
+    );
     eprintln!("generated code {base_generated}");
 
     let original_map = context.funcache.as_ref().unwrap().function_outputs.clone();
@@ -255,8 +271,15 @@ fn test_codegen_function_cache() {
     });
 
     // If the code wasn't regenerated in response to this, we'd have the same program.
-    let generated_flipped_let_binding =
-        Rc::new(codegen(&mut context, opts.clone(), &flipped_letbinding_program).unwrap());
+    let generated_flipped_let_binding = Rc::new(
+        codegen(
+            &mut context,
+            opts.clone(),
+            Some(&dependency_graph),
+            &flipped_letbinding_program,
+        )
+        .unwrap(),
+    );
     let mut flipped_map = context.funcache.as_ref().unwrap().function_outputs.clone();
     diffmap(&mut flipped_map, &original_map);
 
@@ -303,15 +326,29 @@ fn test_codegen_function_cache() {
         None
     });
 
-    let generated_double_flip =
-        Rc::new(codegen(&mut context, opts.clone(), &fake_flip_program).unwrap());
+    let generated_double_flip = Rc::new(
+        codegen(
+            &mut context,
+            opts.clone(),
+            Some(&dependency_graph),
+            &fake_flip_program,
+        )
+        .unwrap(),
+    );
 
     // We'll zap the cache and do it again.  The version we get for GG should be the same as in
     // the original because we transformed the environment back to the same shape observed in the
     // original while involving only functions that GG doesn't use.
-    context.funcache = Some(Funcache::new(&compileform));
-    let generated_double_flip_clean_cache =
-        Rc::new(codegen(&mut context, opts.clone(), &fake_flip_program).unwrap());
+    context.funcache = Some(Funcache::default());
+    let generated_double_flip_clean_cache = Rc::new(
+        codegen(
+            &mut context,
+            opts.clone(),
+            Some(&dependency_graph),
+            &fake_flip_program,
+        )
+        .unwrap(),
+    );
 
     // They're the same program, so we can use the clean cache below to check generated bodies.
     assert_eq!(generated_double_flip, generated_double_flip_clean_cache);
@@ -339,13 +376,27 @@ fn test_codegen_function_cache() {
         None
     });
 
-    let generated_diff_c =
-        Rc::new(codegen(&mut context, opts.clone(), &constant_diff_program).unwrap());
+    let generated_diff_c = Rc::new(
+        codegen(
+            &mut context,
+            opts.clone(),
+            Some(&dependency_graph),
+            &constant_diff_program,
+        )
+        .unwrap(),
+    );
 
     // Clobber cache and generate again so we can see exactly what was generated.
-    context.funcache = Some(Funcache::new(&compileform));
-    let generated_diff_c_clean =
-        Rc::new(codegen(&mut context, opts.clone(), &constant_diff_program).unwrap());
+    context.funcache = Some(Funcache::default());
+    let generated_diff_c_clean = Rc::new(
+        codegen(
+            &mut context,
+            opts.clone(),
+            Some(&dependency_graph),
+            &constant_diff_program,
+        )
+        .unwrap(),
+    );
     let generated_diff_c_map_clean = context.funcache.as_ref().unwrap().function_outputs.clone();
     assert_eq!(generated_diff_c, generated_diff_c_clean);
 

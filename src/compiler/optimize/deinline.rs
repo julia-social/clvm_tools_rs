@@ -57,15 +57,14 @@ pub fn deinline_opt(
     }
 
     if context.funcache.is_none() {
-        context.funcache = Some(Funcache {
-            function_outputs: HashMap::new(),
-            dependency_graph: FunctionDependencyGraph::new(&compileform),
-        });
+        context.funcache = Some(Funcache::default());
     }
+
+    let depgraph = FunctionDependencyGraph::new(&compileform);
 
     let mut best_compileform = compileform.clone();
 
-    let generated_program = codegen(context, opts.clone(), &best_compileform)?;
+    let generated_program = codegen(context, opts.clone(), Some(&depgraph), &best_compileform)?;
     let mut metric = sexp_scale(&generated_program);
     let is_module_compile = opts.module_phase().is_some();
 
@@ -120,22 +119,18 @@ pub fn deinline_opt(
     // until we reach a root.
     //
     // Remember the root this function belongs to.
-    let leaves: Vec<Vec<u8>> = {
-        let depgraph = &context.funcache.as_ref().unwrap().dependency_graph;
-
-        depgraph
-            .leaves()
-            .iter()
-            .filter(|l| {
-                depgraph
-                    .helpers
-                    .get(&l.to_vec())
-                    .map(|l| !matches!(l.status, DepgraphKind::UserNonInline))
-                    .unwrap_or(false)
-            })
-            .cloned()
-            .collect()
-    };
+    let leaves: Vec<Vec<u8>> = depgraph
+        .leaves()
+        .iter()
+        .filter(|l| {
+            depgraph
+                .helpers
+                .get(&l.to_vec())
+                .map(|l| !matches!(l.status, DepgraphKind::UserNonInline))
+                .unwrap_or(false)
+        })
+        .cloned()
+        .collect();
 
     let mut roots: HashMap<Vec<u8>, BTreeSet<Vec<u8>>> = HashMap::new();
 
@@ -143,10 +138,7 @@ pub fn deinline_opt(
     for l in leaves.iter() {
         let mut visited = HashSet::new();
         let mut leaf_roots = BTreeSet::new();
-        {
-            let depgraph = &context.funcache.as_ref().unwrap().dependency_graph;
-            find_roots(&mut visited, &mut leaf_roots, depgraph, l);
-        }
+        find_roots(&mut visited, &mut leaf_roots, &depgraph, l);
         if leaf_roots.is_empty() {
             leaf_roots.insert(l.to_vec());
         }
@@ -203,10 +195,7 @@ pub fn deinline_opt(
             let mut full_tree_set = HashSet::new();
             for root in root_set.iter() {
                 let mut full_tree = HashSet::new();
-                {
-                    let depgraph = &context.funcache.as_ref().unwrap().dependency_graph;
-                    depgraph.get_full_depends_on(&mut full_tree, root);
-                }
+                depgraph.get_full_depends_on(&mut full_tree, root);
                 full_tree_set = full_tree.union(&full_tree_set).cloned().collect();
             }
             if full_tree_set.is_empty() {
@@ -256,7 +245,8 @@ pub fn deinline_opt(
                     continue;
                 }
 
-                let maybe_smaller_program = codegen(context, opts.clone(), &compileform)?;
+                let maybe_smaller_program =
+                    codegen(context, opts.clone(), Some(&depgraph), &compileform)?;
                 let new_metric = sexp_scale(&maybe_smaller_program);
 
                 // Don't keep this change if it made things worse.

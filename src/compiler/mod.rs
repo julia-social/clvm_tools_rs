@@ -45,7 +45,6 @@ use crate::classic::clvm_tools::stages::stage_0::TRunProgram;
 use crate::compiler::comptypes::{
     BodyForm, CompileErr, CompileForm, CompilerOpts, DefunData, HelperForm, PrimaryCodegen,
 };
-use crate::compiler::optimize::depgraph::{DepgraphOptions, FunctionDependencyGraph};
 use crate::compiler::optimize::Optimization;
 use crate::compiler::sexp::SExp;
 
@@ -55,23 +54,9 @@ pub struct FunctionEntry {
     pub code: Rc<SExp>,
 }
 
+#[derive(Default)]
 pub struct Funcache {
     pub function_outputs: HashMap<Vec<u8>, FunctionEntry>,
-    pub dependency_graph: FunctionDependencyGraph,
-}
-
-impl Funcache {
-    pub fn new(cf: &CompileForm) -> Self {
-        Funcache {
-            function_outputs: HashMap::new(),
-            dependency_graph: FunctionDependencyGraph::new_with_options(
-                cf,
-                DepgraphOptions {
-                    with_constants: true,
-                },
-            ),
-        }
-    }
 }
 
 /// An object which represents the standard set of mutable items passed down the

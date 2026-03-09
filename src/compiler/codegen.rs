@@ -27,9 +27,9 @@ use crate::compiler::prims::{primapply, primcons, primquote};
 use crate::compiler::runtypes::RunFailure;
 use crate::compiler::sexp::{decode_string, printable, SExp};
 use crate::compiler::srcloc::Srcloc;
+use crate::compiler::FunctionEntry;
 use crate::compiler::StartOfCodegenOptimization;
 use crate::compiler::{BasicCompileContext, CompileContextWrapper};
-use crate::compiler::{Funcache, FunctionEntry};
 use crate::util::{toposort, u8_from_number, Number, TopoSortItem};
 
 const MACRO_TIME_LIMIT: usize = 1000000;
@@ -797,7 +797,7 @@ pub fn do_mod_codegen(
         .set_module_phase(None);
     let mut throwaway_symbols = HashMap::new();
     let mut context_wrapper = CompileContextWrapper::from_context(context, &mut throwaway_symbols);
-    let code = codegen(&mut context_wrapper.context, without_env, program)?;
+    let code = codegen(&mut context_wrapper.context, without_env, None, program)?;
     Ok(CompiledCode(
         program.loc.clone(),
         Rc::new(SExp::Cons(
@@ -1007,10 +1007,10 @@ fn filter_env(used: &[Vec<u8>], nil: Rc<SExp>, env: Rc<SExp>) -> Rc<SExp> {
         SExp::Cons(l, a, b) => {
             let new_a = filter_env(used, nil.clone(), a.clone());
             let new_b = filter_env(used, nil.clone(), b.clone());
-            let old_a_ptr = &*a;
-            let old_b_ptr = &*b;
-            let new_a_ptr = &*new_a;
-            let new_b_ptr = &*new_b;
+            let old_a_ptr: *const SExp = &*a;
+            let old_b_ptr: *const SExp = &*b;
+            let new_a_ptr: *const SExp = &*new_a;
+            let new_b_ptr: *const SExp = &*new_b;
             if old_a_ptr == new_a_ptr && old_b_ptr == new_b_ptr {
                 return env;
             }
@@ -1074,12 +1074,11 @@ fn get_depended_on_forms(
 
 fn get_function_cache_key(
     compiler: &PrimaryCodegen,
-    fc: &Funcache,
+    dependency_graph: &FunctionDependencyGraph,
     helper: &HelperForm,
 ) -> Vec<u8> {
     let mut depends_on_set = HashSet::new();
-    fc.dependency_graph
-        .get_full_depends_on(&mut depends_on_set, helper.name());
+    dependency_graph.get_full_depends_on(&mut depends_on_set, helper.name());
     let mut depends_on: Vec<_> = depends_on_set.into_iter().collect();
     depends_on.sort();
     // Collect depended on function forms
@@ -1094,14 +1093,15 @@ fn get_function_cache_key(
     sha256tree(hashable)
 }
 
-pub fn codegen_(
+fn codegen_(
     context: &mut BasicCompileContext,
     opts: Rc<dyn CompilerOpts>,
+    dependency_graph: Option<&FunctionDependencyGraph>,
     compiler: &PrimaryCodegen,
     h: &HelperForm,
     allow_redef: bool,
 ) -> Result<PrimaryCodegen, CompileErr> {
-    match &h {
+    match h {
         HelperForm::Defun(inline, defun) => {
             if *inline {
                 // Note: this just replaces a dummy function inserted earlier.
@@ -1115,10 +1115,16 @@ pub fn codegen_(
                     },
                 ))
             } else {
-                let cache_key = context
-                    .funcache
+                let check_already_present = |code| {
+                    fail_if_present(defun.loc.clone(), &compiler.inlines, &defun.name, code)
+                        .and_then(|code| {
+                            fail_if_present(defun.loc.clone(), &compiler.defuns, &defun.name, code)
+                        })
+                };
+                let cache_key = dependency_graph
                     .as_ref()
-                    .map(|fc| get_function_cache_key(compiler, fc, h));
+                    .filter(|_| context.funcache.is_some())
+                    .map(|d| get_function_cache_key(compiler, d, h));
 
                 if let Some(code) = cache_key.as_ref().and_then(|key| {
                     context
@@ -1126,6 +1132,7 @@ pub fn codegen_(
                         .as_ref()
                         .and_then(|c| c.function_outputs.get(key).map(|e| e.code.clone()))
                 }) {
+                    check_already_present(code.clone())?;
                     return Ok(compiler.add_defun(
                         &defun.name,
                         defun.orig_args.clone(),
@@ -1194,12 +1201,7 @@ pub fn codegen_(
                 let code = if allow_redef {
                     code
                 } else {
-                    fail_if_present(defun.loc.clone(), &compiler.inlines, &defun.name, code)?
-                };
-                let code = if allow_redef {
-                    code
-                } else {
-                    fail_if_present(defun.loc.clone(), &compiler.defuns, &defun.name, code)?
+                    check_already_present(code.clone())?
                 };
 
                 if let (Some(fc), Some(hash)) = (&mut context.funcache, cache_key) {
@@ -2486,6 +2488,7 @@ fn make_env_tree(loc: &Srcloc, env: &[Rc<SExp>], start: usize, end: usize) -> Rc
 pub fn codegen(
     context: &mut BasicCompileContext,
     opts: Rc<dyn CompilerOpts>,
+    dependency_graph: Option<&FunctionDependencyGraph>,
     cmod: &CompileForm,
 ) -> Result<SExp, CompileErr> {
     let mut start_of_codegen_optimization = StartOfCodegenOptimization {
@@ -2513,7 +2516,14 @@ pub fn codegen(
         for h in to_process.iter() {
             if let HelperForm::Defun(_, _) = h {
                 already_processed.insert(h.name().to_vec());
-                code_generator = codegen_(context, opts.clone(), &code_generator, h, true)?;
+                code_generator = codegen_(
+                    context,
+                    opts.clone(),
+                    dependency_graph,
+                    &code_generator,
+                    h,
+                    true,
+                )?;
             }
         }
 
@@ -2533,7 +2543,14 @@ pub fn codegen(
         // them are captured, they've been computed.
         for h in generation_order.iter() {
             already_processed.insert(h.name().to_vec());
-            code_generator = codegen_(context, opts.clone(), &code_generator, h, true)?;
+            code_generator = codegen_(
+                context,
+                opts.clone(),
+                dependency_graph,
+                &code_generator,
+                h,
+                true,
+            )?;
         }
     }
 
@@ -2542,7 +2559,14 @@ pub fn codegen(
             continue;
         }
 
-        code_generator = codegen_(context, opts.clone(), &code_generator, f, false)?;
+        code_generator = codegen_(
+            context,
+            opts.clone(),
+            dependency_graph,
+            &code_generator,
+            f,
+            false,
+        )?;
     }
 
     // If stepping 23 or greater, we support no-env mode.
@@ -2607,7 +2631,14 @@ pub fn codegen(
 
             for h in to_process.iter() {
                 // Regenerate representations of functions.
-                code_generator = codegen_(context, opts.clone(), &code_generator, h, true)?;
+                code_generator = codegen_(
+                    context,
+                    opts.clone(),
+                    dependency_graph,
+                    &code_generator,
+                    h,
+                    true,
+                )?;
             }
 
             prev_repr = this_repr;
