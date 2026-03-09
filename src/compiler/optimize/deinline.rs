@@ -245,8 +245,7 @@ pub fn deinline_opt(
                     continue;
                 }
 
-                let maybe_smaller_program =
-                    codegen(context, opts.clone(), Some(&depgraph), &compileform)?;
+                let maybe_smaller_program = codegen(context, opts.clone(), Some(&depgraph), &compileform)?;
                 let new_metric = sexp_scale(&maybe_smaller_program);
 
                 // Don't keep this change if it made things worse.

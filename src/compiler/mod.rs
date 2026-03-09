@@ -68,6 +68,9 @@ pub struct BasicCompileContext {
     pub optimizer: Box<dyn Optimization>,
     /// Given the operative environment and a serialization of the helper, this is the generated
     /// code from that helper.
+    ///
+    /// Since this is for speeding up optimization-time work, generation of the dependency graph
+    /// must follow desugaring.
     pub funcache: Option<Funcache>,
 }
 
