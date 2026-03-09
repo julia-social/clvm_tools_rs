@@ -54,16 +54,9 @@ pub struct FunctionEntry {
     pub code: Rc<SExp>,
 }
 
+#[derive(Default)]
 pub struct Funcache {
     pub function_outputs: HashMap<Vec<u8>, FunctionEntry>,
-}
-
-impl Funcache {
-    pub fn new() -> Self {
-        Funcache {
-            function_outputs: HashMap::new(),
-        }
-    }
 }
 
 /// An object which represents the standard set of mutable items passed down the

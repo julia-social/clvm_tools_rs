@@ -1825,13 +1825,7 @@ pub fn codegen(
     let to_process = code_generator.to_process.clone();
 
     for f in to_process {
-        code_generator = codegen_(
-            context,
-            opts.clone(),
-            dependency_graph.clone(),
-            &code_generator,
-            &f,
-        )?;
+        code_generator = codegen_(context, opts.clone(), dependency_graph, &code_generator, &f)?;
     }
 
     // If stepping 23 or greater, we support no-env mode.

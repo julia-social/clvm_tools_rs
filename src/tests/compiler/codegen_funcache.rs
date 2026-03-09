@@ -180,7 +180,7 @@ fn test_codegen_function_cache() {
     let mut desugared = do_desugar(&compileform).unwrap();
 
     // This enables caching.
-    context.funcache = Some(Funcache::new());
+    context.funcache = Some(Funcache::default());
 
     // Set the constant CC to not be tabled so we can test inlined constant changes.
     transform_helper(&mut desugared, |h| {
@@ -339,7 +339,7 @@ fn test_codegen_function_cache() {
     // We'll zap the cache and do it again.  The version we get for GG should be the same as in
     // the original because we transformed the environment back to the same shape observed in the
     // original while involving only functions that GG doesn't use.
-    context.funcache = Some(Funcache::new());
+    context.funcache = Some(Funcache::default());
     let generated_double_flip_clean_cache = Rc::new(
         codegen(
             &mut context,
@@ -387,7 +387,7 @@ fn test_codegen_function_cache() {
     );
 
     // Clobber cache and generate again so we can see exactly what was generated.
-    context.funcache = Some(Funcache::new());
+    context.funcache = Some(Funcache::default());
     let generated_diff_c_clean = Rc::new(
         codegen(
             &mut context,
