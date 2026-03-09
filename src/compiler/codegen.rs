@@ -963,6 +963,12 @@ fn codegen_(
                     },
                 ))
             } else {
+                let check_already_present = |code| {
+                    fail_if_present(defun.loc.clone(), &compiler.inlines, &defun.name, code)
+                        .and_then(|code| {
+                            fail_if_present(defun.loc.clone(), &compiler.defuns, &defun.name, code)
+                        })
+                };
                 let cache_key = dependency_graph
                     .as_ref()
                     .filter(|_| context.funcache.is_some())
@@ -974,6 +980,7 @@ fn codegen_(
                         .as_ref()
                         .and_then(|c| c.function_outputs.get(key).map(|e| e.code.clone()))
                 }) {
+                    check_already_present(code.clone())?;
                     return Ok(compiler.add_defun(
                         &defun.name,
                         defun.orig_args.clone(),
@@ -1019,12 +1026,7 @@ fn codegen_(
                             Rc::new(code.to_sexp()),
                         )
                     })
-                    .and_then(|code| {
-                        fail_if_present(defun.loc.clone(), &compiler.inlines, &defun.name, code)
-                    })
-                    .and_then(|code| {
-                        fail_if_present(defun.loc.clone(), &compiler.defuns, &defun.name, code)
-                    })
+                    .and_then(check_already_present)
                     .map(|code| {
                         if let (Some(fc), Some(hash)) = (&mut context.funcache, cache_key) {
                             fc.function_outputs.insert(
