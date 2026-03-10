@@ -603,15 +603,8 @@ fn compile_call(
                         )),
                     );
 
-                    let mut unused_symbol_table = HashMap::new();
-                    let runner = context.runner();
                     updated_opts
-                        .compile_program(
-                            context.allocator(),
-                            runner,
-                            Rc::new(use_body),
-                            &mut unused_symbol_table,
-                        )
+                        .compile_program(context, Rc::new(use_body))
                         .map(|code| {
                             CompiledCode(
                                 call.loc.clone(),
@@ -891,15 +884,8 @@ fn codegen_(
                     )),
                 );
 
-                let mut unused_symbol_table = HashMap::new();
-                let runner = context.runner();
                 updated_opts
-                    .compile_program(
-                        context.allocator(),
-                        runner.clone(),
-                        Rc::new(tocompile),
-                        &mut unused_symbol_table,
-                    )
+                    .compile_program(context, Rc::new(tocompile))
                     .and_then(|code| {
                         context.post_codegen_function_optimize(opts.clone(), Some(h), Rc::new(code))
                     })
@@ -1406,13 +1392,8 @@ fn start_codegen(
                         )),
                     );
                     let updated_opts = opts.set_code_generator(code_generator.clone());
+                    let code = updated_opts.compile_program(context, Rc::new(expand_program))?;
                     let runner = context.runner();
-                    let code = updated_opts.compile_program(
-                        context.allocator(),
-                        runner.clone(),
-                        Rc::new(expand_program),
-                        &mut HashMap::new(),
-                    )?;
                     run(
                         context.allocator(),
                         runner,
@@ -1446,7 +1427,7 @@ fn start_codegen(
                     let evaluator =
                         Evaluator::new(opts.clone(), context.runner(), program.helpers.clone());
                     let constant_result = evaluator.shrink_bodyform(
-                        context.allocator(),
+                        context,
                         Rc::new(SExp::Nil(defc.loc.clone())),
                         &HashMap::new(),
                         defc.body.clone(),
@@ -1487,13 +1468,7 @@ fn start_codegen(
                     .set_start_env(None)
                     .set_frontend_opt(false);
 
-                let runner = context.runner();
-                let code = updated_opts.compile_program(
-                    context.allocator(),
-                    runner.clone(),
-                    macro_program,
-                    &mut HashMap::new(),
-                )?;
+                let code = updated_opts.compile_program(context, macro_program)?;
 
                 let optimized_code =
                     context.macro_optimization(opts.clone(), Rc::new(code.clone()))?;

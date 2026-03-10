@@ -2629,7 +2629,7 @@ fn test_reproduce_variable_repr_bug_deinline() {
 
     let compile = |p: &str| do_basic_run(&vec!["run".to_string(), p.to_string()]);
 
-    let mut output = compile(&source_program);
+    let output = compile(&source_program);
     // Produce the same program 30 times.  Demonstrates that this program didn't
     // produce a stable output (otherwise we wouldn't know the bug was fixed).
     let mut different = false;
@@ -2642,7 +2642,7 @@ fn test_reproduce_variable_repr_bug_deinline() {
     // Bump sigil
     let new_program = &source_program.replace("cl-24", "cl-25");
 
-    let mut output = compile(&new_program);
+    let output = compile(&new_program);
     // Produce the same program 30 times.  The output should not be unstable.
     for _ in 0..30 {
         assert_eq!(output, compile(&new_program));
