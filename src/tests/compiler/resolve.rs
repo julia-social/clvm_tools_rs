@@ -11,7 +11,6 @@ use crate::compiler::comptypes::{
     BodyForm, CompileErr, CompileForm, CompilerOpts, DefunData, HelperForm, LetFormKind,
 };
 use crate::compiler::frontend::frontend;
-use crate::compiler::optimize::depgraph::{DepgraphOptions, FunctionDependencyGraph};
 use crate::compiler::optimize::get_optimizer;
 use crate::compiler::resolve::resolve_namespaces;
 use crate::compiler::sexp::{decode_string, parse_sexp, SExp};
@@ -48,16 +47,10 @@ fn compile_program_get_result(
         HashMap::new(),
         get_optimizer(&loc, opts.clone())?,
     );
-    let dependency_graph = FunctionDependencyGraph::new_with_options(
-        &desugared,
-        DepgraphOptions {
-            with_constants: true,
-        },
-    );
     let generated = codegen(
         &mut context,
         opts.clone(),
-        Some(&dependency_graph),
+        None,
         &desugared,
     )?;
     run(
