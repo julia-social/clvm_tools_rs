@@ -810,7 +810,10 @@ impl Preprocessor {
             ..desc
         });
 
-        if !matches!(kind, Some(IncludeProcessType::Compiled)) {
+        // Only the None type (textural include) and Compiled type should gather includes.
+        // Module includes are separate (and separately tracked) and the embedding types
+        // should not be recursed (which had been an error at one point).
+        if !matches!(kind, None | Some(IncludeProcessType::Compiled)) {
             return Ok(());
         }
 
