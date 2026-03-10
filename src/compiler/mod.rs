@@ -258,6 +258,22 @@ impl<'a> CompileContextWrapper<'a> {
         swap(self.allocator, &mut self.context.allocator);
         swap(self.symbols, &mut self.context.symbols);
     }
+
+    pub fn from_context(
+        context: &'a mut BasicCompileContext,
+        symbols: &'a mut HashMap<String, String>,
+    ) -> Self {
+        let runner = context.runner();
+        let optimizer = context.optimizer.duplicate();
+        let bcc = BasicCompileContext::new(Allocator::new(), runner, HashMap::new(), optimizer);
+        let mut wrapper = CompileContextWrapper {
+            allocator: &mut context.allocator,
+            symbols,
+            context: bcc,
+        };
+        wrapper.switch();
+        wrapper
+    }
 }
 
 /// Drop CompileContextWrapper reverts the contained objects back to the ones
