@@ -324,7 +324,7 @@ impl CompilerOpts for DefaultCompilerOpts {
             &mut context.allocator,
             runner,
             &mut context.symbols,
-            get_optimizer(&sexp.loc(), me.clone())?
+            get_optimizer(&sexp.loc(), me.clone())?,
         );
         compile_pre_forms(&mut context_wrapper.context, me, &[sexp])
     }
