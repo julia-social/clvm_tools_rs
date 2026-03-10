@@ -1078,8 +1078,15 @@ impl CompilerOpts for DefaultCompilerOpts {
         sexp: Rc<SExp>,
     ) -> Result<CompilerOutput, CompileErr> {
         let _int_conversion_bug = NewStyleIntConversion::new(self.dialect.int_fix);
-        let me = self.set_module_phase(None);
-        compile_pre_forms(context, me, &[sexp])
+        let me = Rc::new(self.clone());
+        let runner = context.runner.clone();
+        let mut context_wrapper = CompileContextWrapper::new(
+            &mut context.allocator,
+            runner,
+            &mut context.symbols,
+            get_optimizer(&sexp.loc(), me.clone())?,
+        );
+        compile_pre_forms(&mut context_wrapper.context, me, &[sexp])
     }
 }
 
