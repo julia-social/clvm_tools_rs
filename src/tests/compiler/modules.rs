@@ -603,3 +603,19 @@ fn test_empty_module_file() {
     let opts: Rc<dyn CompilerOpts> = Rc::new(DefaultCompilerOpts::new(filename));
     assert!(frontend(opts.clone(), &[]).is_err());
 }
+
+#[test]
+fn test_cl24_fix_always_present() {
+    let filename = "resources/tests/module/impzz.clsp";
+    let content = fs::read_to_string(filename).expect("file should exist");
+    let hex_file = "resources/tests/module/impzz.hex";
+    test_compile_and_run_program_with_modules(
+        filename,
+        &content,
+        &[HexArgumentOutcome {
+            hexfile: hex_file,
+            argument: "(3)",
+            outcome: Run("(0x00 0x0001 0x0003 768 0x00)"),
+        }],
+    );
+}
