@@ -14,7 +14,9 @@ use crate::classic::clvm_tools::stages::stage_0::{DefaultProgramRunner, TRunProg
 
 use crate::compiler::cldb::hex_to_modern_sexp;
 use crate::compiler::clvm;
-use crate::compiler::clvm::{convert_from_clvm_rs, sha256tree, sha256tree_from_atom, truthy};
+use crate::compiler::clvm::{
+    convert_from_clvm_rs, sha256tree, sha256tree_from_atom, truthy, NewStyleIntConversion,
+};
 use crate::compiler::compiler::{compile_from_compileform, compile_pre_forms};
 use crate::compiler::comptypes::{
     BodyForm, CompileErr, CompileForm, CompilerOpts, CompilerOutput, ConstantKind, DefconstData,
@@ -1384,6 +1386,8 @@ impl Preprocessor {
         includes: &mut Vec<IncludeDesc>,
         cmod: &[Rc<SExp>],
     ) -> Result<PreprocessResult, CompileErr> {
+        // Always active since this launched afterthe fix.
+        let _int_conversion_bug = NewStyleIntConversion::new(true);
         if !cmod.is_empty() {
             self.prelude_import = Rc::new(SExp::Cons(
                 cmod[0].loc(),
