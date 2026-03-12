@@ -19,6 +19,8 @@ pub struct AcceptedDialect {
     pub stepping: Option<i32>,
     pub strict: bool,
     pub int_fix: bool,
+    // Extra numeric constants
+    pub extra_numeric_constants: bool,
 }
 
 /// A package containing the content we should insert when a dialect include is
@@ -53,6 +55,7 @@ lazy_static! {
                         stepping: Some(21),
                         strict: true,
                         int_fix: false,
+                        extra_numeric_constants: false,
                     },
                     content: indoc! {"(
                     (defconstant *chialisp-version* 22)
@@ -67,6 +70,7 @@ lazy_static! {
                         stepping: Some(22),
                         strict: false,
                         int_fix: false,
+                        extra_numeric_constants: false,
                     },
                     content: indoc! {"(
                     (defconstant *chialisp-version* 22)
@@ -81,6 +85,7 @@ lazy_static! {
                         stepping: Some(23),
                         strict: true,
                         int_fix: false,
+                        extra_numeric_constants: false,
                     },
                     content: indoc! {"(
                     (defconstant *chialisp-version* 23)
@@ -95,6 +100,7 @@ lazy_static! {
                         stepping: Some(23),
                         strict: true,
                         int_fix: true,
+                        extra_numeric_constants: false,
                     },
                     content: indoc! {"(
                     (defconstant *chialisp-version* 23)
@@ -109,6 +115,7 @@ lazy_static! {
                         stepping: Some(24),
                         strict: true,
                         int_fix: true,
+                        extra_numeric_constants: false,
                     },
                     content: indoc! {"(
                     (defconstant *chialisp-version* 24)
@@ -123,10 +130,24 @@ lazy_static! {
                         stepping: Some(25),
                         strict: true,
                         int_fix: true,
+                        extra_numeric_constants: false,
                     },
                     content: indoc! {"(
                     (defconstant *chialisp-version* 25)
                 )"}
+                    .to_string(),
+                },
+            ),
+            (
+                "*numeric-constants*",
+                DialectDescription {
+                    accepted: AcceptedDialect {
+                        stepping: None,
+                        strict: false,
+                        int_fix: true,
+                        extra_numeric_constants: true,
+                    },
+                    content: indoc! {"()"}
                     .to_string(),
                 },
             ),
