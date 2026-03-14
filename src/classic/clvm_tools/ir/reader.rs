@@ -149,8 +149,6 @@ pub fn bitwise_constant(bits: u32, chars: &[u8]) -> Result<Vec<u8>, SyntaxErr> {
     let mut current_bit: u32 = 0;
     let mut bit_buffer: u16 = 0;
     let mut out_data = Vec::new();
-    let mut significant_bits = 0;
-    let mut counting_zeros = false;
     for ch in chars.iter().map(|c| c | 0x20).rev() {
         if let Some(found) = BIT_CHAR_LIST
             .iter()
