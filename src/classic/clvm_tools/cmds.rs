@@ -36,8 +36,8 @@ use crate::classic::clvm_tools::debug::{
     program_hash_from_program_env_cons, start_log_after, trace_pre_eval, trace_to_table,
     trace_to_text,
 };
-use crate::classic::clvm_tools::ir::reader::read_ir;
 use crate::classic::clvm_tools::ir::r#type::NEW_BIT_CONSTANTS;
+use crate::classic::clvm_tools::ir::reader::read_ir;
 use crate::classic::clvm_tools::sha256tree::sha256tree;
 use crate::classic::clvm_tools::stages;
 use crate::classic::clvm_tools::stages::stage_0::{
@@ -1151,7 +1151,7 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
             NEW_BIT_CONSTANTS
         } else {
             0
-        }
+        },
     );
     // Ensure we know the user's wishes about the disassembly version here.
     special_runner.set_operators_version(get_disassembly_ver(&parsed_args));

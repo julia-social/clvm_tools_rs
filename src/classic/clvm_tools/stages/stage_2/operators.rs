@@ -110,7 +110,12 @@ pub struct CompilerOperators {
 // down a reference became very hairy.  The downside is that a few objects had become fixed in
 // an Rc cycle.  The drop trait below corrects that.
 impl CompilerOperators {
-    pub fn new(source_file: &str, search_paths: Vec<String>, symbols_extra_info: bool, language_flags: u32) -> Self {
+    pub fn new(
+        source_file: &str,
+        search_paths: Vec<String>,
+        symbols_extra_info: bool,
+        language_flags: u32,
+    ) -> Self {
         CompilerOperators {
             parent: Rc::new(CompilerOperatorsInternal::new(
                 source_file,
@@ -129,7 +134,12 @@ impl Drop for CompilerOperators {
 }
 
 impl CompilerOperatorsInternal {
-    pub fn new(source_file: &str, search_paths: Vec<String>, symbols_extra_info: bool, language_flags: u32) -> Self {
+    pub fn new(
+        source_file: &str,
+        search_paths: Vec<String>,
+        symbols_extra_info: bool,
+        language_flags: u32,
+    ) -> Self {
         let base_runner = Rc::new(DefaultProgramRunner::new());
         CompilerOperatorsInternal {
             source_file: source_file.to_owned(),

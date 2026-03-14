@@ -8,8 +8,8 @@ use std::rc::Rc;
 use clvm_rs::allocator::Allocator;
 
 use crate::classic::clvm::__type_compatibility__::{bi_one, bi_zero};
-use crate::classic::clvm_tools::stages::stage_0::TRunProgram;
 use crate::classic::clvm_tools::ir::r#type::NEW_BIT_CONSTANTS;
+use crate::classic::clvm_tools::stages::stage_0::TRunProgram;
 
 use crate::compiler::clvm::{sha256tree, NewStyleIntConversion};
 use crate::compiler::codegen::{codegen, hoist_body_let_binding, process_helper_let_bindings};
@@ -166,12 +166,11 @@ pub fn compile_file(
 ) -> Result<SExp, CompileErr> {
     let _int_conversion_bug = NewStyleIntConversion::new(opts.dialect().int_fix);
     let srcloc = Srcloc::start(&opts.filename());
-    let flags =
-        if opts.dialect().extra_numeric_constants {
-            NEW_BIT_CONSTANTS
-        } else {
-            0
-        };
+    let flags = if opts.dialect().extra_numeric_constants {
+        NEW_BIT_CONSTANTS
+    } else {
+        0
+    };
     let pre_forms = parse_sexp_flags(srcloc.clone(), content.bytes(), flags)?;
     let mut context_wrapper = CompileContextWrapper::new(
         allocator,

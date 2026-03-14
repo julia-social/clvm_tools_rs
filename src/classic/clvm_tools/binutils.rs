@@ -46,9 +46,11 @@ pub fn assemble_from_ir_with_flags(
                 }
             }
         }
-        IRRepr::Cons(l, r) => assemble_from_ir_with_flags(allocator, l.clone(), language_flags).and_then(|l| {
-            assemble_from_ir_with_flags(allocator, r.clone(), language_flags).and_then(|r| allocator.new_pair(l, r))
-        }),
+        IRRepr::Cons(l, r) => assemble_from_ir_with_flags(allocator, l.clone(), language_flags)
+            .and_then(|l| {
+                assemble_from_ir_with_flags(allocator, r.clone(), language_flags)
+                    .and_then(|r| allocator.new_pair(l, r))
+            }),
     }
 }
 
@@ -148,7 +150,7 @@ pub fn disassemble_with_kw_and_flags(
     allocator: &Allocator,
     sexp: NodePtr,
     keyword_from_atom: &Record<Vec<u8>, String>,
-    language_flags: u32
+    language_flags: u32,
 ) -> String {
     let with_keywords = !matches!(allocator.sexp(sexp), SExp::Atom);
     let symbols = disassemble_to_ir_with_kw(allocator, sexp, keyword_from_atom, with_keywords);
@@ -168,11 +170,15 @@ pub fn disassemble(allocator: &Allocator, sexp: NodePtr, version: Option<usize>)
         allocator,
         sexp,
         keyword_from_atom(version.unwrap_or(OPERATORS_LATEST_VERSION)),
-        0
+        0,
     )
 }
 
-pub fn assemble_with_flags(allocator: &mut Allocator, s: &str, flags: u32) -> Result<NodePtr, EvalErr> {
+pub fn assemble_with_flags(
+    allocator: &mut Allocator,
+    s: &str,
+    flags: u32,
+) -> Result<NodePtr, EvalErr> {
     let v = s.as_bytes().to_vec();
     let stream = Stream::new(Some(Bytes::new(Some(BytesFromType::Raw(v)))));
     let mut reader = IRReader::new(stream, flags);

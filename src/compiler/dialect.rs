@@ -162,8 +162,7 @@ lazy_static! {
                         int_fix: true,
                         extra_numeric_constants: true,
                     },
-                    content: indoc! {"()"}
-                    .to_string(),
+                    content: indoc! {"()"}.to_string(),
                 },
             ),
         ];

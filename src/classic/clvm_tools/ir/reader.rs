@@ -36,7 +36,10 @@ impl IRReader {
     }
 
     pub fn new(s: Stream, flags: u32) -> Self {
-        IRReader { stream: s, language_flags: flags }
+        IRReader {
+            stream: s,
+            language_flags: flags,
+        }
     }
 }
 
@@ -149,7 +152,14 @@ pub fn bitwise_constant(bits: u32, chars: &[u8]) -> Result<Vec<u8>, SyntaxErr> {
     let mut significant_bits = 0;
     let mut counting_zeros = false;
     for ch in chars.iter().map(|c| c | 0x20).rev() {
-        if let Some(found) = BIT_CHAR_LIST.iter().enumerate().take(radix).filter(|(_,the_char)| **the_char == ch).map(|(i,_)| i).next() {
+        if let Some(found) = BIT_CHAR_LIST
+            .iter()
+            .enumerate()
+            .take(radix)
+            .filter(|(_, the_char)| **the_char == ch)
+            .map(|(i, _)| i)
+            .next()
+        {
             bit_buffer |= (found << current_bit) as u16;
             current_bit += bits;
             if current_bit > 8 {
@@ -158,11 +168,13 @@ pub fn bitwise_constant(bits: u32, chars: &[u8]) -> Result<Vec<u8>, SyntaxErr> {
                 bit_buffer >>= 8;
             }
         } else {
-            return Err(SyntaxErr::new(format!("bitwise constant with {bits} bits, have char {}", ch as char)));
+            return Err(SyntaxErr::new(format!(
+                "bitwise constant with {bits} bits, have char {}",
+                ch as char
+            )));
         }
     }
 
-    eprintln!("current_bit {current_bit} bits {bits} bit_buffer {bit_buffer}");
     if chars.len() > 1 && (current_bit >= bits || (current_bit > 0 && (bit_buffer & 0xff) != 0)) {
         out_data.push((bit_buffer & 0xff) as u8);
     }
@@ -182,15 +194,24 @@ pub fn interpret_atom_value(chars: &[u8], language_flags: u32) -> Result<IRRepr,
 
         if chars.len() < 3 {
             // Not allowed.
-            return Err(SyntaxErr::new("too short numeric constant starting with '0'".to_string()));
+            return Err(SyntaxErr::new(
+                "too short numeric constant starting with '0'".to_string(),
+            ));
         }
         match chars[1] {
-            b'b' | b'B' => Ok(IRRepr::Binary(Bytes::new(Some(BytesFromType::Raw(bitwise_constant(1, &chars[2..])?))))),
-            b'o' | b'O' => Ok(IRRepr::Octal(Bytes::new(Some(BytesFromType::Raw(bitwise_constant(3, &chars[2..])?))))),
-            b'x' | b'X' => Ok(IRRepr::Hex(Bytes::new(Some(BytesFromType::Raw(bitwise_constant(4, &chars[2..])?))))),
-            _ => {
-                Err(SyntaxErr::new(format!("malformed int or bit constant '{}'", String::from_utf8_lossy(&chars))))
-            }
+            b'b' | b'B' => Ok(IRRepr::Binary(Bytes::new(Some(BytesFromType::Raw(
+                bitwise_constant(1, &chars[2..])?,
+            ))))),
+            b'o' | b'O' => Ok(IRRepr::Octal(Bytes::new(Some(BytesFromType::Raw(
+                bitwise_constant(3, &chars[2..])?,
+            ))))),
+            b'x' | b'X' => Ok(IRRepr::Hex(Bytes::new(Some(BytesFromType::Raw(
+                bitwise_constant(4, &chars[2..])?,
+            ))))),
+            _ => Err(SyntaxErr::new(format!(
+                "malformed int or bit constant '{}'",
+                String::from_utf8_lossy(&chars)
+            ))),
         }
     } else if is_hex(chars) {
         let mut string_bytes = if !chars.len().is_multiple_of(2) {
@@ -218,7 +239,11 @@ pub fn interpret_atom_value(chars: &[u8], language_flags: u32) -> Result<IRRepr,
     }
 }
 
-pub fn consume_atom(s: &mut IRReader, b: &Bytes, language_flags: u32) -> Result<Option<IRRepr>, SyntaxErr> {
+pub fn consume_atom(
+    s: &mut IRReader,
+    b: &Bytes,
+    language_flags: u32,
+) -> Result<Option<IRRepr>, SyntaxErr> {
     let mut result_vec = b.data().to_vec();
     loop {
         let b = s.read(1);

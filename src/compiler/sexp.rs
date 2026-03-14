@@ -126,7 +126,11 @@ impl PartialEq for SExp {
     }
 }
 
-fn output_with_radix(formatter: &mut std::fmt::Formatter<'_>, bits: usize, bytes: &[u8]) -> Result<(), std::fmt::Error> {
+fn output_with_radix(
+    formatter: &mut std::fmt::Formatter<'_>,
+    bits: usize,
+    bytes: &[u8],
+) -> Result<(), std::fmt::Error> {
     let raw_content_bits = 8 * bytes.len();
     let digit_mask = (1 << bits) - 1;
     let digits = (raw_content_bits + bits) / bits;
@@ -145,7 +149,6 @@ fn output_with_radix(formatter: &mut std::fmt::Formatter<'_>, bits: usize, bytes
         while buffer_bit >= bits {
             buffer_bit -= bits;
             let digit_value = (buffer >> buffer_bit) & digit_mask;
-            eprintln!("buffer_bit {buffer_bit} buffer {buffer} digit_value {digit_value} digit_mask {digit_mask}");
             if digit_value != 0 {
                 produce_output = true;
             }
@@ -314,7 +317,13 @@ fn matches_integral(loc: &Srcloc, s: &[u8], flags: u32) -> Result<Integral, (Src
         match s[1] {
             b'b' | b'B' => Ok(Integral::Binary),
             b'o' | b'O' => Ok(Integral::Octal),
-            _ => Err((loc.clone(), format!("Constant value with wrong radix selection: {}", decode_string(s))))
+            _ => Err((
+                loc.clone(),
+                format!(
+                    "Constant value with wrong radix selection: {}",
+                    decode_string(s)
+                ),
+            )),
         }
     } else if is_hex(s) {
         Ok(Integral::Hex)
@@ -351,12 +360,22 @@ fn from_hex(l: Srcloc, v: &[u8]) -> SExp {
 }
 
 fn from_oct(l: &Srcloc, v: &[u8]) -> Result<SExp, (Srcloc, String)> {
-    let bytes = bitwise_constant(3, &v[2..]).map_err(|_| (l.clone(), format!("bad octal constant {}", decode_string(v))))?;
+    let bytes = bitwise_constant(3, &v[2..]).map_err(|_| {
+        (
+            l.clone(),
+            format!("bad octal constant {}", decode_string(v)),
+        )
+    })?;
     Ok(SExp::QuotedString(l.clone(), b'o', bytes))
 }
 
 fn from_bin(l: &Srcloc, v: &[u8]) -> Result<SExp, (Srcloc, String)> {
-    let bytes = bitwise_constant(1, &v[2..]).map_err(|_| (l.clone(), format!("bad binary constant {}", decode_string(v))))?;
+    let bytes = bitwise_constant(1, &v[2..]).map_err(|_| {
+        (
+            l.clone(),
+            format!("bad binary constant {}", decode_string(v)),
+        )
+    })?;
     Ok(SExp::QuotedString(l.clone(), b'b', bytes))
 }
 
@@ -638,7 +657,12 @@ fn restructure_list(mut this_list: Vec<Rc<SExp>>, srcloc: Srcloc) -> Rc<SExp> {
     Rc::new(make_cons(left_subtree, right_subtree))
 }
 
-fn parse_sexp_step(loc: Srcloc, current_state: &SExpParseState, this_char: u8, language_flags: u32) -> SExpParseResult {
+fn parse_sexp_step(
+    loc: Srcloc,
+    current_state: &SExpParseState,
+    this_char: u8,
+    language_flags: u32,
+) -> SExpParseResult {
     // switch on our state
     match current_state {
         SExpParseState::Empty => match this_char as char {
@@ -668,7 +692,11 @@ fn parse_sexp_step(loc: Srcloc, current_state: &SExpParseState, this_char: u8, l
             if char::is_whitespace(this_char as char) {
                 // we've found a space, so it's the end of a word
                 emit(
-                    Rc::new(make_atom(srcloc.clone(), word_so_far.to_vec(), language_flags)?),
+                    Rc::new(make_atom(
+                        srcloc.clone(),
+                        word_so_far.to_vec(),
+                        language_flags,
+                    )?),
                     SExpParseState::Empty,
                 )
             } else {
@@ -709,7 +737,12 @@ fn parse_sexp_step(loc: Srcloc, current_state: &SExpParseState, this_char: u8, l
             // we are beginning a new list
             ')' => emit(Rc::new(SExp::Nil(srcloc.ext(&loc))), SExpParseState::Empty), // create a Nil object
             '.' => error(loc, "Dot can't appear directly after begin paren"),
-            _ => match parse_sexp_step(loc.clone(), &SExpParseState::Empty, this_char, language_flags)? {
+            _ => match parse_sexp_step(
+                loc.clone(),
+                &SExpParseState::Empty,
+                this_char,
+                language_flags,
+            )? {
                 // fetch result of parsing as if we were in empty state
                 SExpParseOutput::Emit(o, current_state) => resume(SExpParseState::ParsingList(
                     // we found an object, resume processing
@@ -724,7 +757,7 @@ fn parse_sexp_step(loc: Srcloc, current_state: &SExpParseState, this_char: u8, l
                     Rc::new(current_state), // captured state from our pretend empty state
                     Vec::new(),
                     *is_structured,
-                ))
+                )),
             },
         },
         // We are in the middle of a list currently
@@ -777,28 +810,30 @@ fn parse_sexp_step(loc: Srcloc, current_state: &SExpParseState, this_char: u8, l
                     }
                 }
                 // analyze this character using the mock "inner state" stored in pp
-                (_, _, _) => match parse_sexp_step(loc.clone(), pp.borrow(), this_char, language_flags)? {
-                    //
-                    SExpParseOutput::Emit(o, current_state) => {
-                        // add result of parse_sexp_step to our list
-                        let mut list_copy = list_content.clone();
-                        list_copy.push(o);
-                        let result = SExpParseState::ParsingList(
+                (_, _, _) => {
+                    match parse_sexp_step(loc.clone(), pp.borrow(), this_char, language_flags)? {
+                        //
+                        SExpParseOutput::Emit(o, current_state) => {
+                            // add result of parse_sexp_step to our list
+                            let mut list_copy = list_content.clone();
+                            list_copy.push(o);
+                            let result = SExpParseState::ParsingList(
+                                srcloc.ext(&loc),
+                                Rc::new(current_state),
+                                list_copy,
+                                *is_structured,
+                            );
+                            resume(result)
+                        }
+                        SExpParseOutput::Resume(rp) => resume(SExpParseState::ParsingList(
+                            // we aren't finished reading in our nested state
                             srcloc.ext(&loc),
-                            Rc::new(current_state),
-                            list_copy,
+                            Rc::new(rp), // store the returned state from parse_sexp_step in pp
+                            list_content.to_vec(),
                             *is_structured,
-                        );
-                        resume(result)
+                        )),
                     }
-                    SExpParseOutput::Resume(rp) => resume(SExpParseState::ParsingList(
-                        // we aren't finished reading in our nested state
-                        srcloc.ext(&loc),
-                        Rc::new(rp), // store the returned state from parse_sexp_step in pp
-                        list_content.to_vec(),
-                        *is_structured,
-                    )),
-                },
+                }
             }
         }
 
@@ -887,23 +922,25 @@ fn parse_sexp_step(loc: Srcloc, current_state: &SExpParseState, this_char: u8, l
                     }
                 }
                 // if we see anything other than ')' or '.' parse it as if we were in empty state
-                (_, _) => match parse_sexp_step(loc.clone(), pp.borrow(), this_char, language_flags)? {
-                    SExpParseOutput::Emit(parsed_object, _current_state) => {
-                        resume(SExpParseState::TermList(
-                            loc,
-                            Some(parsed_object), // assert parsed_object is not None and then store it in parsed_list
-                            Rc::new(SExpParseState::Empty),
-                            list_content.clone(),
-                        ))
+                (_, _) => {
+                    match parse_sexp_step(loc.clone(), pp.borrow(), this_char, language_flags)? {
+                        SExpParseOutput::Emit(parsed_object, _current_state) => {
+                            resume(SExpParseState::TermList(
+                                loc,
+                                Some(parsed_object), // assert parsed_object is not None and then store it in parsed_list
+                                Rc::new(SExpParseState::Empty),
+                                list_content.clone(),
+                            ))
+                        }
+                        // resume means it didn't finish parsing yet, so store inner state and keep going
+                        SExpParseOutput::Resume(current_state) => resume(SExpParseState::TermList(
+                            srcloc.ext(&loc),
+                            None,
+                            Rc::new(current_state), // store our partial inner parsestate in pp
+                            list_content.to_vec(),
+                        )),
                     }
-                    // resume means it didn't finish parsing yet, so store inner state and keep going
-                    SExpParseOutput::Resume(current_state) => resume(SExpParseState::TermList(
-                        srcloc.ext(&loc),
-                        None,
-                        Rc::new(current_state), // store our partial inner parsestate in pp
-                        list_content.to_vec(),
-                    )),
-                },
+                }
             }
         }
         SExpParseState::StartStructuredList(l) => {
@@ -952,7 +989,12 @@ impl ParsePartialResult {
 
         // call parse_sexp_step for current character
         // it will return a ParseResult which contains the new ParseState
-        match parse_sexp_step(self.srcloc.clone(), &self.parse_state, this_char, self.language_flags)? {
+        match parse_sexp_step(
+            self.srcloc.clone(),
+            &self.parse_state,
+            this_char,
+            self.language_flags,
+        )? {
             // Keep parsing
             SExpParseOutput::Resume(new_parse_state) => {
                 self.srcloc = next_location;
@@ -973,7 +1015,9 @@ impl ParsePartialResult {
         // depending on the state when we finished return Ok or Err enums
         match self.parse_state {
             SExpParseState::Empty => Ok(self.res),
-            SExpParseState::Bareword(l, t) => Ok(vec![Rc::new(make_atom(l, t, self.language_flags)?)]),
+            SExpParseState::Bareword(l, t) => {
+                Ok(vec![Rc::new(make_atom(l, t, self.language_flags)?)])
+            }
             SExpParseState::CommentText => Ok(self.res),
             SExpParseState::QuotedText(l, _, _) => {
                 Err((l, "unterminated quoted string".to_string()))
@@ -993,7 +1037,11 @@ impl ParsePartialResult {
     }
 }
 
-fn parse_sexp_inner<I>(start: Srcloc, s: I, language_flags: u32) -> Result<Vec<Rc<SExp>>, (Srcloc, String)>
+fn parse_sexp_inner<I>(
+    start: Srcloc,
+    s: I,
+    language_flags: u32,
+) -> Result<Vec<Rc<SExp>>, (Srcloc, String)>
 where
     I: Iterator<Item = u8>,
 {
@@ -1013,7 +1061,11 @@ where
 ///
 /// This produces Rc<SExp>, where SExp is described above.
 ///
-pub fn parse_sexp_flags<I>(start: Srcloc, input: I, flags: u32) -> Result<Vec<Rc<SExp>>, (Srcloc, String)>
+pub fn parse_sexp_flags<I>(
+    start: Srcloc,
+    input: I,
+    flags: u32,
+) -> Result<Vec<Rc<SExp>>, (Srcloc, String)>
 where
     I: Iterator<Item = u8>,
 {

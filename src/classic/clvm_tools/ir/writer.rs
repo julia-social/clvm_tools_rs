@@ -20,7 +20,7 @@ enum IROutputState {
 #[derive(Debug)]
 struct IROutputIterator {
     state: Vec<IROutputState>,
-    language_flags: u32
+    language_flags: u32,
 }
 
 impl IROutputIterator {
@@ -71,13 +71,17 @@ impl Iterator for IROutputIterator {
                             let mut buffer_bits: usize = 0;
                             let mut output_vec = Vec::new();
 
-                            let spill_bits = |buffer: &mut u16, buffer_bits: &mut usize, output_vec: &mut Vec<u8>, while_zero: bool| {
-                                while *buffer_bits >= 3 && (*buffer != 0 || while_zero) {
-                                    output_vec.push(b'0' + (*buffer & 7) as u8);
-                                    *buffer >>= 3;
-                                    *buffer_bits -= 3;
-                                }
-                            };
+                            let spill_bits =
+                                |buffer: &mut u16,
+                                 buffer_bits: &mut usize,
+                                 output_vec: &mut Vec<u8>,
+                                 while_zero: bool| {
+                                    while *buffer_bits >= 3 && (*buffer != 0 || while_zero) {
+                                        output_vec.push(b'0' + (*buffer & 7) as u8);
+                                        *buffer >>= 3;
+                                        *buffer_bits -= 3;
+                                    }
+                                };
 
                             for byte in o.data().iter() {
                                 buffer <<= 8;
