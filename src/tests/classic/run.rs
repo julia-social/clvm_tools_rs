@@ -2648,3 +2648,93 @@ fn test_reproduce_variable_repr_bug_deinline() {
         assert_eq!(output, compile(&new_program));
     }
 }
+
+#[test]
+fn binary_numeric_constant_classic_0() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod () (include *numeric-constants*) 0o0)".to_string(),
+    ]);
+    assert_eq!(program.trim(), "()");
+}
+
+#[test]
+fn binary_numeric_constant_modern_0() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod () (include *standard-cl-nc25*) 0o0)".to_string(),
+    ]);
+    assert_eq!(program.trim(), "(1)");
+}
+
+#[test]
+fn binary_numeric_constant_classic_1() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod () (include *numeric-constants*) 0o377)".to_string(),
+    ]);
+    assert_eq!(program.trim(), "(q . -1)");
+}
+
+#[test]
+fn binary_numeric_constant_modern_01() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod () (include *standard-cl-nc25*) 0o377)".to_string(),
+    ]);
+    assert_eq!(program.trim(), "(1 . 0o377)");
+}
+
+#[test]
+fn binary_numeric_constant_classic_01() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod () (include *numeric-constants*) 0o0377)".to_string(),
+    ]);
+    assert_eq!(program.trim(), "(q . 255)");
+}
+
+#[test]
+fn binary_numeric_constant_modern_1() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod () (include *standard-cl-nc25*) 0o0377)".to_string(),
+    ]);
+    assert_eq!(program.trim(), "(1 . 0o0377)");
+}
+
+#[test]
+fn binary_numeric_constant_classic_2() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod () (include *numeric-constants*) 0b1100)".to_string(),
+    ]);
+    assert_eq!(program.trim(), "(q . 12)");
+}
+
+#[test]
+fn binary_numeric_constant_modern_2() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod () (include *standard-cl-nc25*) 0b1100)".to_string(),
+    ]);
+    assert_eq!(program.trim(), "(1 . 0b1100)");
+}
+
+#[test]
+fn binary_numeric_constant_classic_3() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod () (include *numeric-constants*) 0b000001100)".to_string(),
+    ]);
+    assert_eq!(program.trim(), "(q . 0x000c)");
+}
+
+#[test]
+fn binary_numeric_constant_modern_3() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod () (include *standard-cl-nc25*) 0b000001100)".to_string(),
+    ]);
+    assert_eq!(program.trim(), "(1 . 0b000001100)");
+}

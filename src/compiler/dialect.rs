@@ -11,7 +11,7 @@ use crate::compiler::sexp::decode_string;
 /// BASE_STEPPING, all of which should use similar optimizer objects.
 pub const OPT_STRATEGY_BASE_STEPPING: i32 = 23;
 /// The maximum stepping of the language so far.
-pub const MAX_STEPPING: i32 = 24;
+pub const MAX_STEPPING: i32 = 25;
 
 /// Specifying how the language is spoken.
 #[derive(Clone, Debug, Default)]
@@ -131,6 +131,21 @@ lazy_static! {
                         strict: true,
                         int_fix: true,
                         extra_numeric_constants: false,
+                    },
+                    content: indoc! {"(
+                    (defconstant *chialisp-version* 25)
+                )"}
+                    .to_string(),
+                },
+            ),
+            (
+                "*standard-cl-nc25*",
+                DialectDescription {
+                    accepted: AcceptedDialect {
+                        stepping: Some(25),
+                        strict: true,
+                        int_fix: true,
+                        extra_numeric_constants: true,
                     },
                     content: indoc! {"(
                     (defconstant *chialisp-version* 25)

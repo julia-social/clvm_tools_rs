@@ -126,6 +126,41 @@ impl PartialEq for SExp {
     }
 }
 
+fn output_with_radix(formatter: &mut std::fmt::Formatter<'_>, bits: usize, bytes: &[u8]) -> Result<(), std::fmt::Error> {
+    let raw_content_bits = 8 * bytes.len();
+    let digit_mask = (1 << bits) - 1;
+    let digits = (raw_content_bits + bits) / bits;
+    let digit_bits = bits * digits;
+    let mut buffer_bit = digit_bits % 8;
+    let mut buffer: u32 = 0;
+    // If the leftmost byte is zero, then we must include an octal digit that's
+    // completely inside it.
+    if bytes[0] == 0 {
+        formatter.write_str("0")?;
+    }
+    let mut produce_output = false;
+    for byte in bytes.iter() {
+        buffer = (buffer << 8) | *byte as u32;
+        buffer_bit += 8;
+        while buffer_bit >= bits {
+            buffer_bit -= bits;
+            let digit_value = (buffer >> buffer_bit) & digit_mask;
+            eprintln!("buffer_bit {buffer_bit} buffer {buffer} digit_value {digit_value} digit_mask {digit_mask}");
+            if digit_value != 0 {
+                produce_output = true;
+            }
+            if produce_output {
+                write!(formatter, "{}", (b'0' + (digit_value as u8)) as char)?;
+            }
+        }
+        // Regardless of anything else, start producing output on the second
+        // byte.
+        produce_output = true;
+    }
+
+    Ok(())
+}
+
 impl Display for SExp {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
@@ -145,6 +180,12 @@ impl Display for SExp {
                     formatter.write_str("\"")?;
                     formatter.write_str(&escape_quote(*q, s))?;
                     formatter.write_str("\"")?;
+                } else if *q == b'o' {
+                    formatter.write_str("0o")?;
+                    output_with_radix(formatter, 3, &s)?;
+                } else if *q == b'b' {
+                    formatter.write_str("0b")?;
+                    output_with_radix(formatter, 1, &s)?;
                 } else {
                     let vlen = s.len() * 2;
                     let mut outbuf = vec![0; vlen];
@@ -310,12 +351,12 @@ fn from_hex(l: Srcloc, v: &[u8]) -> SExp {
 }
 
 fn from_oct(l: &Srcloc, v: &[u8]) -> Result<SExp, (Srcloc, String)> {
-    let bytes = bitwise_constant(3, v).map_err(|_| (l.clone(), format!("bad octal constant {}", decode_string(v))))?;
+    let bytes = bitwise_constant(3, &v[2..]).map_err(|_| (l.clone(), format!("bad octal constant {}", decode_string(v))))?;
     Ok(SExp::QuotedString(l.clone(), b'o', bytes))
 }
 
 fn from_bin(l: &Srcloc, v: &[u8]) -> Result<SExp, (Srcloc, String)> {
-    let bytes = bitwise_constant(1, v).map_err(|_| (l.clone(), format!("bad binary constant {}", decode_string(v))))?;
+    let bytes = bitwise_constant(1, &v[2..]).map_err(|_| (l.clone(), format!("bad binary constant {}", decode_string(v))))?;
     Ok(SExp::QuotedString(l.clone(), b'b', bytes))
 }
 

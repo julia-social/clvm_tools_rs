@@ -865,13 +865,3 @@ fn test_smoke_cl23_program_without_zero_folding() {
     let result = s.get_value().decode().trim().to_string();
     assert_eq!(result, "(2 (1 . 2) (4 (1 . 0x0000) 1))");
 }
-
-/*
-#[test]
-fn binary_numeric_constant() {
-    let mut allocator = Allocator::new();
-    let program = "(mod () (defmacro assert items (if (r items) (list if (f items) (c assert (r items)) (q . (x))) (f items))) (assert 1))";
-    let result = compile_program(&mut allocator, ".".to_string(), program.to_string());
-    assert_eq!(result, Ok("(q . 1)".to_string()));
-}
-*/

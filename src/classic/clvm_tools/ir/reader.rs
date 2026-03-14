@@ -146,6 +146,8 @@ pub fn bitwise_constant(bits: u32, chars: &[u8]) -> Result<Vec<u8>, SyntaxErr> {
     let mut current_bit: u32 = 0;
     let mut bit_buffer: u16 = 0;
     let mut out_data = Vec::new();
+    let mut significant_bits = 0;
+    let mut counting_zeros = false;
     for ch in chars.iter().map(|c| c | 0x20).rev() {
         if let Some(found) = BIT_CHAR_LIST.iter().enumerate().take(radix).filter(|(_,the_char)| **the_char == ch).map(|(i,_)| i).next() {
             bit_buffer |= (found << current_bit) as u16;
@@ -160,7 +162,8 @@ pub fn bitwise_constant(bits: u32, chars: &[u8]) -> Result<Vec<u8>, SyntaxErr> {
         }
     }
 
-    if current_bit > 0 {
+    eprintln!("current_bit {current_bit} bits {bits} bit_buffer {bit_buffer}");
+    if chars.len() > 1 && (current_bit >= bits || (current_bit > 0 && (bit_buffer & 0xff) != 0)) {
         out_data.push((bit_buffer & 0xff) as u8);
     }
 
