@@ -6,7 +6,8 @@ use std::rc::Rc;
 
 use num_bigint::ToBigInt;
 
-use crate::classic::clvm::__type_compatibility__::bi_one;
+use crate::classic::clvm::__type_compatibility__::{bi_one, bi_zero};
+use crate::classic::clvm_tools::node_path::compose_paths;
 
 use crate::compiler::clvm::{run, truthy};
 use crate::compiler::compiler::is_at_capture;
@@ -17,7 +18,7 @@ use crate::compiler::comptypes::{
     RawCallSpec, SyntheticType,
 };
 use crate::compiler::debug::{build_swap_table_mut, relabel};
-use crate::compiler::evaluate::{Evaluator, EVAL_STACK_LIMIT};
+use crate::compiler::evaluate::{Evaluator, EVAL_STACK_LIMIT, is_apply_atom};
 use crate::compiler::frontend::{compile_bodyform, make_provides_set};
 use crate::compiler::gensym::gensym;
 use crate::compiler::inline::{replace_in_inline, synthesize_args};
@@ -28,7 +29,7 @@ use crate::compiler::sexp::{decode_string, printable, SExp};
 use crate::compiler::srcloc::Srcloc;
 use crate::compiler::StartOfCodegenOptimization;
 use crate::compiler::{BasicCompileContext, CompileContextWrapper};
-use crate::util::{toposort, u8_from_number, TopoSortItem};
+use crate::util::{toposort, u8_from_number, TopoSortItem, Number};
 
 const MACRO_TIME_LIMIT: usize = 1000000;
 const CONST_EVAL_LIMIT: usize = 1000000;
@@ -324,6 +325,22 @@ fn get_prim(loc: Srcloc, prims: Rc<HashMap<Vec<u8>, Rc<SExp>>>, name: &[u8]) -> 
     None
 }
 
+fn atom_is_env_ref(atom: &SExp) -> bool {
+    if let SExp::Atom(_, name) = atom {
+        name == b"@" || name == b"@*env*"
+    } else {
+        false
+    }
+}
+
+fn call_head_is_atom(bf: &BodyForm) -> bool {
+    if let BodyForm::Value(at) = bf {
+        atom_is_env_ref(at)
+    } else {
+        false
+    }
+}
+
 pub fn get_callable(
     _opts: Rc<dyn CompilerOpts>,
     compiler: &PrimaryCodegen,
@@ -339,8 +356,7 @@ pub fn get_callable(
             let defun = create_name_lookup(compiler, l.clone(), name, false);
             let prim = get_prim(l.clone(), compiler.prims.clone(), name);
             let atom_is_com = *name == "com".as_bytes().to_vec();
-            let atom_is_at =
-                *name == "@".as_bytes().to_vec() || *name == "@*env*".as_bytes().to_vec();
+            let atom_is_at = atom_is_env_ref(&atom);
             match (macro_def, inline, defun, prim, atom_is_com, atom_is_at) {
                 (Some(macro_def), _, _, _, _, _) => {
                     let macro_def_clone: &SExp = macro_def.borrow();
@@ -479,6 +495,97 @@ pub fn get_call_name(l: Srcloc, body: BodyForm) -> Result<Rc<SExp>, CompileErr> 
     ))
 }
 
+fn compute_parent_of_path(mut path: Number, mut steps: Number) -> Number {
+    let mut bit = bi_one();
+    let two = 2_u32.to_bigint().unwrap();
+
+    while bit < path {
+        bit *= two.clone();
+    }
+
+    while steps > bi_zero() {
+        steps -= bi_one();
+        bit /= two.clone();
+        if path.clone() & bit.clone() != bi_zero() {
+            path ^= bit.clone();
+        }
+        path |= bit.clone() / two.clone();
+    }
+
+    path
+}
+
+// Given an argument name and a number of steps toward the env root, compile code that gives the
+// indicated reference.  This is useful for being able to ask the question: can i execute code that
+// depends on the indicated argument name being present in the environment or, because the
+// referneced parent position is not a pair, it will not be present.
+fn produce_argument_check(
+    compiler: &PrimaryCodegen,
+    loc: Srcloc,
+    a: &[u8],
+    steps: Number,
+) -> Result<CompiledCode, CompileErr> {
+    if let Ok(SExp::Integer(l, lookup)) =
+        create_name_lookup(compiler, loc.clone(), a, true).map(|x| {
+            let x_ref: &SExp = x.borrow();
+            x_ref.clone()
+        })
+    {
+        let lookup = compute_parent_of_path(lookup, steps);
+        Ok(CompiledCode(loc.clone(), Rc::new(SExp::Integer(l, lookup))))
+    } else {
+        Err(CompileErr(
+            loc.clone(),
+            format!(
+                "Lookup of unbound variable {}",
+                SExp::Atom(loc.clone(), a.to_vec())
+            ),
+        ))
+    }
+}
+
+// Check whether the given bodyform could describe a path reference from the user in the form
+// (@ <n>)
+fn is_path(bf: &BodyForm) -> Option<Number> {
+    match bf {
+        BodyForm::Value(SExp::Integer(_, i)) => Some(i.clone()),
+        BodyForm::Call(_, forms, _) => {
+            if forms.len() != 2 {
+                return None;
+            }
+
+            if !call_head_is_atom(&forms[0]) {
+                return None;
+            }
+
+            if let BodyForm::Quoted(SExp::Integer(_, i)) | BodyForm::Value(SExp::Integer(_, i)) = &*forms[1] {
+                return Some(i.clone());
+            }
+
+            None
+        }
+        _ => None
+    }
+}
+
+// Check whether this is the args from a call of the form (a (@ <n>) (@ <m>))
+// If so, give the resulting path reference.
+fn is_applied_path(apply_args: &[Rc<BodyForm>]) -> Option<Number> {
+    if apply_args.len() != 3 {
+        return None;
+    }
+
+    if !is_apply_atom(apply_args[0].to_sexp()) {
+        return None;
+    }
+
+    if let (Some(p), Some(q)) = (is_path(&apply_args[1]), is_path(&apply_args[2])) {
+        return Some(compose_paths(&q, &p));
+    }
+
+    None
+}
+
 fn compile_call(
     context: &mut BasicCompileContext,
     opts: Rc<dyn CompilerOpts>,
@@ -570,7 +677,38 @@ fn compile_call(
                         )),
                         _ => Err(CompileErr(
                             al.clone(),
-                            "@ form only accepts integers at present".to_string(),
+                            "one argument @ form only accepts integers at present".to_string(),
+                        )),
+                    }
+                } else if tl.len() == 2 {
+                    // Expression form like (@ <argument> <n>) to produce a reference to the
+                    // nth parent of the given argument name.
+                    //
+                    // Only allowed if the argument is actually in the environment.
+                    //
+                    // It's an error do ask this question of a computed value or a constant.
+                    match (tl[0].borrow(), tl[1].borrow()) {
+                        (
+                            BodyForm::Value(SExp::Atom(_al, a)),
+                            BodyForm::Value(SExp::Integer(_il, i)),
+                        ) => produce_argument_check(compiler, call.loc.clone(), a, i.clone()),
+                        (
+                            BodyForm::Value(SExp::Atom(_al, a)),
+                            BodyForm::Quoted(SExp::Integer(_il, i)),
+                        ) => produce_argument_check(compiler, call.loc.clone(), a, i.clone()),
+                        (
+                            BodyForm::Call(cl, c, _t),
+                            BodyForm::Value(SExp::Integer(_i1, i)),
+                        ) => {
+                            if let Some(p) = is_applied_path(&c) {
+                                let lookup = compute_parent_of_path(p.clone(), i.clone());
+                                return Ok(CompiledCode(cl.clone().clone(), Rc::new(SExp::Integer(cl.clone(), lookup))));
+                            }
+                            Err(CompileErr(al.clone(), format!("application (@ {} {}) resembles an environment parent reference, but it isn't a simple env reference.", tl[0].to_sexp(), tl[1].to_sexp())))
+                        }
+                        _ => Err(CompileErr(
+                            al.clone(),
+                            format!("@ form with two arguments requires argument and integer, got (@ {} {})", tl[0].to_sexp(), tl[1].to_sexp()),
                         )),
                     }
                 } else {
