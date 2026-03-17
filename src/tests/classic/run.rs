@@ -2774,3 +2774,39 @@ fn test_binary_numeric_constant_modern_3() {
     ]);
     assert_eq!(program.trim(), "(1 . 0b000001100)");
 }
+
+#[test]
+fn test_binary_numeric_constant_classic_4() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod () (include *bitconst*) 0b00)".to_string(),
+    ]);
+    assert_eq!(program.trim(), "(q . 0x00)");
+}
+
+#[test]
+fn test_binary_numeric_constant_modern_4() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod () (include *standard-cl-nc25*) (defconst X (concat 0b00 0x00)) X)".to_string(),
+    ]);
+    assert_eq!(program.trim(), "(2 (1 . 2) (4 (1 . 0x0000) 1))");
+}
+
+#[test]
+fn test_binary_numeric_constant_classic_5() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod () (include *bitconst*) 0o00)".to_string(),
+    ]);
+    assert_eq!(program.trim(), "(q . 0x00)");
+}
+
+#[test]
+fn test_binary_numeric_constant_modern_5() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod () (include *standard-cl-nc25*) (defconst X (concat 0o00 0x00)) X)".to_string(),
+    ]);
+    assert_eq!(program.trim(), "(2 (1 . 2) (4 (1 . 0x0000) 1))");
+}
