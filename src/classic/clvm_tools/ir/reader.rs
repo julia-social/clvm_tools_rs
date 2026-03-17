@@ -173,7 +173,9 @@ pub fn bitwise_constant(bits: u32, chars: &[u8]) -> Result<Vec<u8>, SyntaxErr> {
         }
     }
 
-    if chars.len() > 1 && (current_bit >= bits || (current_bit > 0 && (bit_buffer & 0xff) != 0)) {
+    if (chars.len() > 1 || chars[0] != b'0')
+        && (current_bit >= bits || (current_bit > 0 && (bit_buffer & 0xff) != 0))
+    {
         out_data.push((bit_buffer & 0xff) as u8);
     }
 
