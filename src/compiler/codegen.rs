@@ -562,7 +562,7 @@ fn produce_argument_check(
     a: &[u8],
     steps: Number,
 ) -> Result<CompiledCode, CompileErr> {
-    if let Ok(SExp::Integer(l, lookup)) = create_name_lookup(
+    if let SExp::Integer(l, lookup) = create_name_lookup(
         compiler,
         loc.clone(),
         a,
@@ -571,14 +571,14 @@ fn produce_argument_check(
     .map(|x| {
         let x_ref: &SExp = x.borrow();
         x_ref.clone()
-    }) {
+    })? {
         let lookup = compute_parent_of_path(lookup, steps);
         Ok(CompiledCode(loc.clone(), Rc::new(SExp::Integer(l, lookup))))
     } else {
         Err(CompileErr(
             loc.clone(),
             format!(
-                "Lookup of unbound variable {}",
+                "Disallowed lookup of non-argument binding in @ query {}",
                 SExp::Atom(loc.clone(), a.to_vec())
             ),
         ))
