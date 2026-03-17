@@ -702,7 +702,7 @@ fn compile_call(
                             BodyForm::Call(cl, c, _t),
                             BodyForm::Value(SExp::Integer(_i1, i)),
                         ) => {
-                            if let Some(p) = is_applied_path(&c) {
+                            if let Some(p) = is_applied_path(c) {
                                 let lookup = compute_parent_of_path(p.clone(), i.clone());
                                 return Ok(CompiledCode(cl.clone().clone(), Rc::new(SExp::Integer(cl.clone(), lookup))));
                             }
