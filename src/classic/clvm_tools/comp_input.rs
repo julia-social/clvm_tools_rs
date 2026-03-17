@@ -7,7 +7,7 @@ use crate::classic::clvm::__type_compatibility__::{Bytes, Stream, UnvalidatedByt
 use crate::classic::clvm::serialize::{sexp_from_stream, SimpleCreateCLVMObject};
 use crate::classic::platform::argparse::ArgumentValue;
 
-use crate::classic::clvm_tools::binutils::assemble_from_ir_with_flags;
+use crate::classic::clvm_tools::binutils::assemble_from_ir;
 use crate::classic::clvm_tools::ir::r#type::NEW_BIT_CONSTANTS;
 use crate::classic::clvm_tools::ir::reader::read_ir;
 use crate::classic::clvm_tools::stages::stage_0::DefaultProgramRunner;
@@ -109,7 +109,7 @@ pub fn parse_tool_input_sexp(
                     Ok(ParsedInputPathOrCode {
                         path,
                         content: use_sexp_text,
-                        parsed: assemble_from_ir_with_flags(allocator, Rc::new(v), language_flags)
+                        parsed: assemble_from_ir(allocator, Rc::new(v))
                             .map_err(|e| format!("{e:?}"))?,
                     })
                 })

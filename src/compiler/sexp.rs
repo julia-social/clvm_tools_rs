@@ -185,10 +185,10 @@ impl Display for SExp {
                     formatter.write_str("\"")?;
                 } else if *q == b'o' {
                     formatter.write_str("0o")?;
-                    output_with_radix(formatter, 3, &s)?;
+                    output_with_radix(formatter, 3, s)?;
                 } else if *q == b'b' {
                     formatter.write_str("0b")?;
-                    output_with_radix(formatter, 1, &s)?;
+                    output_with_radix(formatter, 1, s)?;
                 } else {
                     let vlen = s.len() * 2;
                     let mut outbuf = vec![0; vlen];

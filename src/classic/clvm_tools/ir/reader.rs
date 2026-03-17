@@ -208,7 +208,7 @@ pub fn interpret_atom_value(chars: &[u8], language_flags: u32) -> Result<IRRepr,
             ))))),
             _ => Err(SyntaxErr::new(format!(
                 "malformed int or bit constant '{}'",
-                String::from_utf8_lossy(&chars)
+                String::from_utf8_lossy(chars)
             ))),
         }
     } else if is_hex(chars) {

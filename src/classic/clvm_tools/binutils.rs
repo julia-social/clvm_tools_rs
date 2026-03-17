@@ -20,10 +20,9 @@ pub fn is_printable_string(s: &str) -> bool {
     s.chars().all(|s_char| PRINTABLE_CHARS.contains(&s_char))
 }
 
-pub fn assemble_from_ir_with_flags(
+pub fn assemble_from_ir(
     allocator: &mut Allocator,
     ir_sexp: Rc<IRRepr>,
-    language_flags: u32,
 ) -> Result<NodePtr, EvalErr> {
     match ir_sexp.borrow() {
         IRRepr::Null => Ok(NodePtr::NIL),
@@ -46,19 +45,10 @@ pub fn assemble_from_ir_with_flags(
                 }
             }
         }
-        IRRepr::Cons(l, r) => assemble_from_ir_with_flags(allocator, l.clone(), language_flags)
-            .and_then(|l| {
-                assemble_from_ir_with_flags(allocator, r.clone(), language_flags)
-                    .and_then(|r| allocator.new_pair(l, r))
-            }),
+        IRRepr::Cons(l, r) => assemble_from_ir(allocator, l.clone()).and_then(|l| {
+            assemble_from_ir(allocator, r.clone()).and_then(|r| allocator.new_pair(l, r))
+        }),
     }
-}
-
-pub fn assemble_from_ir(
-    allocator: &mut Allocator,
-    ir_sexp: Rc<IRRepr>,
-) -> Result<NodePtr, EvalErr> {
-    assemble_from_ir_with_flags(allocator, ir_sexp, 0)
 }
 
 fn has_oversized_sign_extension(atom: &Bytes) -> bool {

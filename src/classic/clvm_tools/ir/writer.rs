@@ -99,7 +99,7 @@ impl Iterator for IROutputIterator {
                     }
                     IRRepr::Binary(b) => {
                         if (self.language_flags & NEW_BIT_CONSTANTS) != 0 {
-                            let bdata: &[u8] = &b.data();
+                            let bdata: &[u8] = b.data();
                             return Some("0b".to_string() + &BinaryString::from(bdata).to_string());
                         }
 
