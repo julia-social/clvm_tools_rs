@@ -308,17 +308,18 @@ fn create_name_lookup(
         .unwrap_or_else(|| {
             create_name_lookup_(l.clone(), name, compiler.env.clone(), compiler.env.clone()).and_then(
                 |i| {
+                    let is_defun = is_defun_in_codegen(compiler, name);
                     // Determine if it's a defun.  If so we can ensure that it's
                     // callable like a lambda by repeating the left env into it.
                     let find_program = Rc::new(SExp::Integer(l.clone(), i.to_bigint().unwrap()));
-                    if matches!(as_variable, NameLookupType::ReferenceAsVariable) && is_defun_in_codegen(compiler, name) {
+                    if matches!(as_variable, NameLookupType::ReferenceAsVariable) && is_defun {
                         // It's a defun.  Harden the result so it is callable
                         // directly by the CLVM 'a' operator.
                         Ok(lambda_for_defun(l.clone(), find_program))
-                    } else if matches!(as_variable, NameLookupType::SimpleEnvReference | NameLookupType::ReferenceAsVariable) {
-                        Ok(find_program)
-                    } else {
+                    } else if matches!(as_variable, NameLookupType::OnlyVariableBinding) && is_defun {
                         Err(CompileErr(l.clone(), "Taking direct environment reference in main environment isn't allowed for now".to_string()))
+                    } else {
+                        Ok(find_program)
                     }
                 },
             )
@@ -552,7 +553,7 @@ fn produce_argument_check(
         compiler,
         loc.clone(),
         a,
-        NameLookupType::ReferenceAsVariable,
+        NameLookupType::OnlyVariableBinding,
     )
     .map(|x| {
         let x_ref: &SExp = x.borrow();
