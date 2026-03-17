@@ -303,6 +303,9 @@ fn lambda_for_defun(loc: Srcloc, lookup: Rc<SExp>) -> Rc<SExp> {
     )
 }
 
+// Note that renaming has taken place before code generation, so there won't be any shadowing.
+// If a local shadowed a global binding before renaming, the local and all uses would have been
+// given a new, unique name via gensym.
 fn create_name_lookup(
     compiler: &PrimaryCodegen,
     l: Srcloc,
