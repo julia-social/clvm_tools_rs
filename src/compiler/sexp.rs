@@ -317,6 +317,7 @@ fn matches_integral(loc: &Srcloc, s: &[u8], flags: u32) -> Result<Integral, (Src
         match s[1] {
             b'b' | b'B' => Ok(Integral::Binary),
             b'o' | b'O' => Ok(Integral::Octal),
+            b'x' | b'X' => Ok(Integral::Hex),
             _ => Err((
                 loc.clone(),
                 format!(

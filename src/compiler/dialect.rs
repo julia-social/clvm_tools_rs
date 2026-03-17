@@ -154,7 +154,7 @@ lazy_static! {
                 },
             ),
             (
-                "*numeric-constants*",
+                "*bitconst*",
                 DialectDescription {
                     accepted: AcceptedDialect {
                         stepping: None,

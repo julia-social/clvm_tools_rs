@@ -233,7 +233,7 @@ impl CompilerOperatorsInternal {
                         }
                     }
 
-                    if filename == "*numeric-constants*" {
+                    if filename == "*bitconst*" {
                         return parse_file_content(allocator, &"()".to_string());
                     }
 
