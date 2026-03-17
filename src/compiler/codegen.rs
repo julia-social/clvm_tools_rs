@@ -18,7 +18,7 @@ use crate::compiler::comptypes::{
     RawCallSpec, SyntheticType,
 };
 use crate::compiler::debug::{build_swap_table_mut, relabel};
-use crate::compiler::evaluate::{Evaluator, EVAL_STACK_LIMIT, is_apply_atom};
+use crate::compiler::evaluate::{is_apply_atom, Evaluator, EVAL_STACK_LIMIT};
 use crate::compiler::frontend::{compile_bodyform, make_provides_set};
 use crate::compiler::gensym::gensym;
 use crate::compiler::inline::{replace_in_inline, synthesize_args};
@@ -29,7 +29,7 @@ use crate::compiler::sexp::{decode_string, printable, SExp};
 use crate::compiler::srcloc::Srcloc;
 use crate::compiler::StartOfCodegenOptimization;
 use crate::compiler::{BasicCompileContext, CompileContextWrapper};
-use crate::util::{toposort, u8_from_number, TopoSortItem, Number};
+use crate::util::{toposort, u8_from_number, Number, TopoSortItem};
 
 const MACRO_TIME_LIMIT: usize = 1000000;
 const CONST_EVAL_LIMIT: usize = 1000000;
@@ -558,13 +558,15 @@ fn is_path(bf: &BodyForm) -> Option<Number> {
                 return None;
             }
 
-            if let BodyForm::Quoted(SExp::Integer(_, i)) | BodyForm::Value(SExp::Integer(_, i)) = &*forms[1] {
+            if let BodyForm::Quoted(SExp::Integer(_, i)) | BodyForm::Value(SExp::Integer(_, i)) =
+                &*forms[1]
+            {
                 return Some(i.clone());
             }
 
             None
         }
-        _ => None
+        _ => None,
     }
 }
 

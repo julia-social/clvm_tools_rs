@@ -2664,7 +2664,10 @@ fn test_ensure_dereferenceable_2() {
         "run".to_string(),
         "(mod (A B) (include *standard-cl-24*) (defun F (A B) (if (@ B 1) (+ A B) 99)) (F &rest (@ 3)))".to_string(),
     ]);
-    assert_eq!(program.trim(), "(2 (1 2 2 (4 2 3)) (4 (1 2 (3 7 (1 16 5 11) (1 1 . 99)) 1) 1))");
+    assert_eq!(
+        program.trim(),
+        "(2 (1 2 2 (4 2 3)) (4 (1 2 (3 7 (1 16 5 11) (1 1 . 99)) 1) 1))"
+    );
 }
 
 #[test]
@@ -2673,7 +2676,10 @@ fn test_ensure_dereferenceable_3() {
         "run".to_string(),
         "(mod (A B) (include *standard-cl-24*) (defun-inline F (A B) (if (@ B 1) (+ A B) 99)) (F &rest (@ 3)))".to_string(),
     ]);
-    assert_eq!(program.trim(), "(2 (3 5 (1 16 (2 (1 . 2) 3) (2 (1 . 4) 3)) (1 1 . 99)) 1)");
+    assert_eq!(
+        program.trim(),
+        "(2 (3 5 (1 16 (2 (1 . 2) 3) (2 (1 . 4) 3)) (1 1 . 99)) 1)"
+    );
 }
 
 #[test]
@@ -2691,7 +2697,10 @@ fn test_ensure_dereferenceable_5() {
         "run".to_string(),
         "(mod (A B) (include *standard-cl-24*) (defun-inline F (A B) (assign X (if (@ B 1) (+ A B) (* A 3)) (* X 2))) (F A B))".to_string(),
     ]);
-    assert_eq!(program.trim(), "(18 (2 (3 3 (1 16 2 5) (1 18 2 (1 . 3))) 1) (1 . 2))");
+    assert_eq!(
+        program.trim(),
+        "(18 (2 (3 3 (1 16 2 5) (1 18 2 (1 . 3))) 1) (1 . 2))"
+    );
 }
 
 #[test]
