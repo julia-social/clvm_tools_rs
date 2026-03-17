@@ -46,6 +46,12 @@ enum NameLookupType {
     OnlyVariableBinding,
 }
 
+#[derive(Clone)]
+enum EnvDefinitionStatus {
+    IsDefun,
+    IsConstant,
+}
+
 /* As in the python code, produce a pair whose (thanks richard)
  *
  *   - car is the compiled code and
@@ -226,15 +232,22 @@ fn create_name_lookup_(
 // If so, the reference to this name is a reference to a function, which
 // will make variable references to it capture the program's function
 // environment.
-fn is_defun_in_codegen(compiler: &PrimaryCodegen, name: &[u8]) -> bool {
+fn is_defun_or_constant_in_codegen(
+    compiler: &PrimaryCodegen,
+    name: &[u8],
+) -> Option<EnvDefinitionStatus> {
     // Check for an input defun that matches the name.
     for h in compiler.original_helpers.iter() {
-        if matches!(h, HelperForm::Defun(false, _)) && h.name() == name {
-            return true;
+        if h.name() == name {
+            if matches!(h, HelperForm::Defun(false, _)) {
+                return Some(EnvDefinitionStatus::IsDefun);
+            } else if matches!(h, HelperForm::Defconstant(_)) {
+                return Some(EnvDefinitionStatus::IsConstant);
+            }
         }
     }
 
-    false
+    None
 }
 
 // At the CLVM level, given a list of clvm expressios, make an expression
@@ -308,15 +321,15 @@ fn create_name_lookup(
         .unwrap_or_else(|| {
             create_name_lookup_(l.clone(), name, compiler.env.clone(), compiler.env.clone()).and_then(
                 |i| {
-                    let is_defun = is_defun_in_codegen(compiler, name);
+                    let is_defun = is_defun_or_constant_in_codegen(compiler, name);
                     // Determine if it's a defun.  If so we can ensure that it's
                     // callable like a lambda by repeating the left env into it.
                     let find_program = Rc::new(SExp::Integer(l.clone(), i.to_bigint().unwrap()));
-                    if matches!(as_variable, NameLookupType::ReferenceAsVariable) && is_defun {
+                    if matches!(as_variable, NameLookupType::ReferenceAsVariable) && matches!(is_defun, Some(EnvDefinitionStatus::IsDefun)) {
                         // It's a defun.  Harden the result so it is callable
                         // directly by the CLVM 'a' operator.
                         Ok(lambda_for_defun(l.clone(), find_program))
-                    } else if matches!(as_variable, NameLookupType::OnlyVariableBinding) && is_defun {
+                    } else if matches!(as_variable, NameLookupType::OnlyVariableBinding) && is_defun.is_some() {
                         Err(CompileErr(l.clone(), "Taking direct environment reference in main environment isn't allowed for now".to_string()))
                     } else {
                         Ok(find_program)
