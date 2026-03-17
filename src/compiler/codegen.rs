@@ -512,7 +512,11 @@ fn compute_parent_of_path(mut path: Number, mut steps: Number) -> Number {
         path |= bit.clone() / two.clone();
     }
 
-    path
+    if path == bi_zero() {
+        bi_one()
+    } else {
+        path
+    }
 }
 
 // Given an argument name and a number of steps toward the env root, compile code that gives the
@@ -548,7 +552,9 @@ fn produce_argument_check(
 // (@ <n>)
 fn is_path(bf: &BodyForm) -> Option<Number> {
     match bf {
-        BodyForm::Value(SExp::Integer(_, i)) => Some(i.clone()),
+        BodyForm::Value(SExp::Integer(_, i)) | BodyForm::Quoted(SExp::Integer(_, i)) => {
+            Some(i.clone())
+        }
         BodyForm::Call(_, forms, _) => {
             if forms.len() != 2 {
                 return None;
@@ -720,7 +726,7 @@ fn compile_call(
                 } else {
                     Err(CompileErr(
                         al.clone(),
-                        "@ form accepts one argument".to_string(),
+                        "@ form accepts a one argument form, (@ <constant-path>) or (@ <binding> <nth-parent>)".to_string(),
                     ))
                 }
             }
