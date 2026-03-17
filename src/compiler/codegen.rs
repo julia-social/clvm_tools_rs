@@ -693,7 +693,7 @@ fn compile_call(
                         (
                             BodyForm::Value(SExp::Atom(_al, a)),
                             BodyForm::Value(SExp::Integer(_il, i)),
-                        ) => produce_argument_check(compiler, call.loc.clone(), a, i.clone()),
+                        ) |
                         (
                             BodyForm::Value(SExp::Atom(_al, a)),
                             BodyForm::Quoted(SExp::Integer(_il, i)),
@@ -701,6 +701,10 @@ fn compile_call(
                         (
                             BodyForm::Call(cl, c, _t),
                             BodyForm::Value(SExp::Integer(_i1, i)),
+                        ) |
+                        (
+                            BodyForm::Call(cl, c, _t),
+                            BodyForm::Quoted(SExp::Integer(_i1, i)),
                         ) => {
                             if let Some(p) = is_applied_path(c) {
                                 let lookup = compute_parent_of_path(p.clone(), i.clone());
