@@ -34,6 +34,18 @@ use crate::util::{toposort, u8_from_number, Number, TopoSortItem};
 const MACRO_TIME_LIMIT: usize = 1000000;
 const CONST_EVAL_LIMIT: usize = 1000000;
 
+// Tell what kind of lookup is being asked for.
+// ReferenceAsVariable means that references to defuns should appear wrapped so they can be
+// exported or applied.
+// SimpleEnvReference means that the caller just wants the environment path.
+// OnlyBinding means that only data values should match.
+#[derive(Clone, Debug)]
+enum NameLookupType {
+    ReferenceAsVariable,
+    SimpleEnvReference,
+    OnlyVariableBinding,
+}
+
 /* As in the python code, produce a pair whose (thanks richard)
  *
  *   - car is the compiled code and
@@ -287,24 +299,26 @@ fn create_name_lookup(
     // is named, it will be built into an expression that allows it to be
     // called by a CLVM 'a' operator as one would expect, regardless of how
     // it integrates with the rest of the program it lives in.
-    as_variable: bool,
+    as_variable: NameLookupType,
 ) -> Result<Rc<SExp>, CompileErr> {
     compiler
         .constants
         .get(name)
         .map(|x| Ok(x.clone()))
         .unwrap_or_else(|| {
-            create_name_lookup_(l.clone(), name, compiler.env.clone(), compiler.env.clone()).map(
+            create_name_lookup_(l.clone(), name, compiler.env.clone(), compiler.env.clone()).and_then(
                 |i| {
                     // Determine if it's a defun.  If so we can ensure that it's
                     // callable like a lambda by repeating the left env into it.
                     let find_program = Rc::new(SExp::Integer(l.clone(), i.to_bigint().unwrap()));
-                    if as_variable && is_defun_in_codegen(compiler, name) {
+                    if matches!(as_variable, NameLookupType::ReferenceAsVariable) && is_defun_in_codegen(compiler, name) {
                         // It's a defun.  Harden the result so it is callable
                         // directly by the CLVM 'a' operator.
-                        lambda_for_defun(l.clone(), find_program)
+                        Ok(lambda_for_defun(l.clone(), find_program))
+                    } else if matches!(as_variable, NameLookupType::SimpleEnvReference | NameLookupType::ReferenceAsVariable) {
+                        Ok(find_program)
                     } else {
-                        find_program
+                        Err(CompileErr(l.clone(), "Taking direct environment reference in main environment isn't allowed for now".to_string()))
                     }
                 },
             )
@@ -353,7 +367,12 @@ pub fn get_callable(
             let inline = compiler.inlines.get(name);
             // We're getting a callable, so the access requested is not as
             // a variable.
-            let defun = create_name_lookup(compiler, l.clone(), name, false);
+            let defun = create_name_lookup(
+                compiler,
+                l.clone(),
+                name,
+                NameLookupType::SimpleEnvReference,
+            );
             let prim = get_prim(l.clone(), compiler.prims.clone(), name);
             let atom_is_com = *name == "com".as_bytes().to_vec();
             let atom_is_at = atom_is_env_ref(&atom);
@@ -529,12 +548,16 @@ fn produce_argument_check(
     a: &[u8],
     steps: Number,
 ) -> Result<CompiledCode, CompileErr> {
-    if let Ok(SExp::Integer(l, lookup)) =
-        create_name_lookup(compiler, loc.clone(), a, true).map(|x| {
-            let x_ref: &SExp = x.borrow();
-            x_ref.clone()
-        })
-    {
+    if let Ok(SExp::Integer(l, lookup)) = create_name_lookup(
+        compiler,
+        loc.clone(),
+        a,
+        NameLookupType::ReferenceAsVariable,
+    )
+    .map(|x| {
+        let x_ref: &SExp = x.borrow();
+        x_ref.clone()
+    }) {
         let lookup = compute_parent_of_path(lookup, steps);
         Ok(CompiledCode(loc.clone(), Rc::new(SExp::Integer(l, lookup))))
     } else {
@@ -868,39 +891,44 @@ pub fn generate_expr_code(
                         // This is as a variable access, given that we've got
                         // a Value bodyform containing an Atom, so if a defun
                         // is returned, it should be a packaged callable.
-                        create_name_lookup(compiler, l.clone(), atom, true)
-                            .map(|f| Ok(CompiledCode(l.clone(), f)))
-                            .unwrap_or_else(|_| {
-                                if opts.dialect().strict && printable(atom, false) {
-                                    // Finally enable strictness for variable names.
-                                    // This is possible because the modern macro system
-                                    // takes great care to preserve as much information
-                                    // from the source code as possible.
-                                    //
-                                    // When we come here in strict mode, we have
-                                    // a string, integer or atom depending on the
-                                    // user's desire and the explicitly generated
-                                    // result from the macro, therefore we can return
-                                    // an error if this atom didn't have a binding.
-                                    return Err(CompileErr(
-                                        l.clone(),
-                                        format!(
-                                            "Unbound use of {} as a variable name",
-                                            decode_string(atom)
-                                        ),
-                                    ));
-                                }
+                        create_name_lookup(
+                            compiler,
+                            l.clone(),
+                            atom,
+                            NameLookupType::ReferenceAsVariable,
+                        )
+                        .map(|f| Ok(CompiledCode(l.clone(), f)))
+                        .unwrap_or_else(|_| {
+                            if opts.dialect().strict && printable(atom, false) {
+                                // Finally enable strictness for variable names.
+                                // This is possible because the modern macro system
+                                // takes great care to preserve as much information
+                                // from the source code as possible.
+                                //
+                                // When we come here in strict mode, we have
+                                // a string, integer or atom depending on the
+                                // user's desire and the explicitly generated
+                                // result from the macro, therefore we can return
+                                // an error if this atom didn't have a binding.
+                                return Err(CompileErr(
+                                    l.clone(),
+                                    format!(
+                                        "Unbound use of {} as a variable name",
+                                        decode_string(atom)
+                                    ),
+                                ));
+                            }
 
-                                // Pass through atoms that don't look up on behalf of
-                                // macros, as it's possible that a macro returned
-                                // something that's canonically a name in number form.
-                                generate_expr_code(
-                                    context,
-                                    opts,
-                                    compiler,
-                                    Rc::new(BodyForm::Quoted(SExp::Atom(l.clone(), atom.clone()))),
-                                )
-                            })
+                            // Pass through atoms that don't look up on behalf of
+                            // macros, as it's possible that a macro returned
+                            // something that's canonically a name in number form.
+                            generate_expr_code(
+                                context,
+                                opts,
+                                compiler,
+                                Rc::new(BodyForm::Quoted(SExp::Atom(l.clone(), atom.clone()))),
+                            )
+                        })
                     }
                 }
                 SExp::Integer(l, i) => {
