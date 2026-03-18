@@ -144,7 +144,7 @@ fn new_bit_constants(language_flags: u32) -> bool {
     (language_flags & NEW_BIT_CONSTANTS) != 0
 }
 
-pub fn bitwise_constant(bits: u32, chars: &[u8]) -> Result<Vec<u8>, SyntaxErr> {
+pub fn bitwise_constant(bits: u32, chars: &[u8], force_byte: bool) -> Result<Vec<u8>, SyntaxErr> {
     let radix = 1 << bits;
     let mut current_bit: u32 = 0;
     let mut bit_buffer: u16 = 0;
@@ -173,7 +173,7 @@ pub fn bitwise_constant(bits: u32, chars: &[u8]) -> Result<Vec<u8>, SyntaxErr> {
         }
     }
 
-    if (chars.len() > 1 || chars[0] != b'0')
+    if (chars.len() > 1 || chars[0] != b'0' || force_byte)
         && (current_bit >= bits || (current_bit > 0 && (bit_buffer & 0xff) != 0))
     {
         out_data.push((bit_buffer & 0xff) as u8);
@@ -200,13 +200,13 @@ pub fn interpret_atom_value(chars: &[u8], language_flags: u32) -> Result<IRRepr,
         }
         match chars[1] {
             b'b' | b'B' => Ok(IRRepr::Binary(Bytes::new(Some(BytesFromType::Raw(
-                bitwise_constant(1, &chars[2..])?,
+                bitwise_constant(1, &chars[2..], false)?,
             ))))),
             b'o' | b'O' => Ok(IRRepr::Octal(Bytes::new(Some(BytesFromType::Raw(
-                bitwise_constant(3, &chars[2..])?,
+                bitwise_constant(3, &chars[2..], false)?,
             ))))),
             b'x' | b'X' => Ok(IRRepr::Hex(Bytes::new(Some(BytesFromType::Raw(
-                bitwise_constant(4, &chars[2..])?,
+                bitwise_constant(4, &chars[2..], true)?,
             ))))),
             _ => Err(SyntaxErr::new(format!(
                 "malformed int or bit constant '{}'",
