@@ -48,6 +48,12 @@ fn output_with_radix(bits: usize, bytes: &[u8]) -> Vec<u8> {
     // to indicate that it should be padded.
     let mut need_padding = bytes[0] == 0;
 
+    if need_padding && bytes.len() == 1 {
+        result.push(b'0');
+        result.push(b'0');
+        return result;
+    }
+
     let mut produce_output = false;
 
     for byte in bytes.iter() {
@@ -58,10 +64,7 @@ fn output_with_radix(bits: usize, bytes: &[u8]) -> Vec<u8> {
             let digit_value = (buffer >> buffer_bit) & digit_mask;
             if digit_value != 0 || need_padding && !produce_output && buffer_bit < bits {
                 produce_output = true;
-                if need_padding {
-                    need_padding = false;
-                    result.push(b'0');
-                }
+                need_padding = false;
             }
             if produce_output {
                 result.push(b'0' + (digit_value as u8));

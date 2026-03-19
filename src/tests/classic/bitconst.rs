@@ -174,6 +174,13 @@ fn test_binary_numeric_constant_modern_5() {
     assert_eq!(program.trim(), "(2 (1 . 2) (4 (1 . 0x0000) 1))");
 }
 
+#[test]
+fn test_binary_numeric_0377_constant_writer() {
+    let ir_repr = Rc::new(read_ir("0o0377", NEW_BIT_CONSTANTS).unwrap());
+    let reproduced_from_ir = write_ir(ir_repr.clone(), NEW_BIT_CONSTANTS);
+    assert_eq!("0o0377", reproduced_from_ir);
+}
+
 // Fuzzing for these constants:
 // Any constant with just a single 0 digit contains no bytes (except hex)
 // Any binary constant whose #bits is not a multiple of 8.
