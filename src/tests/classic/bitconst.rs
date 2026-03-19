@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use clvmr::Allocator;
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
@@ -5,8 +7,10 @@ use rand_chacha::ChaCha8Rng;
 use crate::tests::classic::run::{do_basic_brun, do_basic_run};
 
 use crate::classic::clvm::sexp::atom;
-use crate::classic::clvm_tools::binutils::assemble_with_flags;
+use crate::classic::clvm_tools::binutils::assemble_from_ir;
 use crate::classic::clvm_tools::ir::r#type::NEW_BIT_CONSTANTS;
+use crate::classic::clvm_tools::ir::reader::read_ir;
+use crate::classic::clvm_tools::ir::writer::write_ir;
 use crate::compiler::sexp::decode_string;
 
 #[test]
@@ -199,7 +203,14 @@ fn test_fuzz_bit_constants() {
     let eval_const = |bits: usize, digits: &[u8], result: &str| {
         let mut allocator = Allocator::new();
         eprintln!("testing {result}");
-        let assembled = assemble_with_flags(&mut allocator, result, NEW_BIT_CONSTANTS).unwrap();
+        let ir_repr = Rc::new(read_ir(result, NEW_BIT_CONSTANTS).unwrap());
+
+        // Check ir writer.
+        let reproduced = write_ir(ir_repr.clone(), NEW_BIT_CONSTANTS);
+        assert_eq!(result.trim(), reproduced);
+
+        // Check assembly layer.
+        let assembled = assemble_from_ir(&mut allocator, ir_repr.clone()).unwrap();
         let atom_data = atom(&allocator, assembled).unwrap();
         // The length should be what we expect.
         let rounded_up_bytes = ((digits.len() * bits) + 7) / 8;
