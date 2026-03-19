@@ -83,7 +83,7 @@ impl Iterator for IROutputIterator {
                                     }
                                 };
 
-                            for byte in o.data().iter() {
+                            for byte in o.data().iter().rev() {
                                 buffer <<= 8;
                                 buffer |= *byte as u16;
                                 buffer_bits += 8;

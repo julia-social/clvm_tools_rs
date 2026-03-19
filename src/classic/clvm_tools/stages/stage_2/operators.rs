@@ -211,7 +211,7 @@ impl CompilerOperatorsInternal {
         // Given a string containing the data in the file to parse, parse it or
         // return EvalErr.
         let parse_file_content = |allocator: &mut Allocator, content: &String| {
-            read_ir(content, 0)
+            read_ir(content, self.language_flags)
                 .map_err(|e| EvalErr::InternalError(NodePtr::NIL, e.to_string()))
                 .and_then(|ir| {
                     assemble_from_ir(allocator, Rc::new(ir)).map(|ir_sexp| Reduction(1, ir_sexp))
