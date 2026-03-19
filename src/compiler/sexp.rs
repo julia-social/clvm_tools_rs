@@ -274,6 +274,7 @@ fn matches_integral(loc: &Srcloc, s: &[u8], flags: u32) -> Result<Integral, (Src
             b'b' | b'B' => Ok(Integral::Binary),
             b'o' | b'O' => Ok(Integral::Octal),
             b'x' | b'X' => Ok(Integral::Hex),
+            b'0' => Ok(Integral::Decimal),
             _ => Err((
                 loc.clone(),
                 format!(

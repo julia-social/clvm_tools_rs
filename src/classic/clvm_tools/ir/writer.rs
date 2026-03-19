@@ -46,7 +46,7 @@ fn output_with_radix(bits: usize, bytes: &[u8]) -> Vec<u8> {
 
     // If the leftmost byte is zero, then we must include a binary or octal digit
     // to indicate that it should be padded.
-    let need_padding = bytes[0] == 0;
+    let mut need_padding = bytes[0] == 0;
 
     let mut produce_output = false;
 
@@ -59,6 +59,7 @@ fn output_with_radix(bits: usize, bytes: &[u8]) -> Vec<u8> {
             if digit_value != 0 || need_padding && !produce_output && buffer_bit < bits {
                 produce_output = true;
                 if need_padding {
+                    need_padding = false;
                     result.push(b'0');
                 }
             }
