@@ -102,7 +102,7 @@ impl Iterator for IROutputIterator {
                         if (self.language_flags & NEW_BIT_CONSTANTS) != 0 {
                             return Some(
                                 "0o".to_string()
-                                    + &String::from_utf8_lossy(&output_with_radix(3, &o.data())),
+                                    + &String::from_utf8_lossy(&output_with_radix(3, o.data())),
                             );
                         }
 
@@ -112,7 +112,7 @@ impl Iterator for IROutputIterator {
                         if (self.language_flags & NEW_BIT_CONSTANTS) != 0 {
                             return Some(
                                 "0b".to_string()
-                                    + &String::from_utf8_lossy(&output_with_radix(1, &b.data())),
+                                    + &String::from_utf8_lossy(&output_with_radix(1, b.data())),
                             );
                         }
 
