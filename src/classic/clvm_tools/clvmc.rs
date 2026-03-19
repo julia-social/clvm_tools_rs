@@ -132,8 +132,8 @@ pub fn compile_clvm_text_maybe_opt(
         };
         // Ensure we re-parse with the flags detected during sigil detection.
         if language_flags != 0 {
-            let ir_src =
-                read_ir(text, language_flags).map_err(|s| EvalErr::InternalError(NodePtr::NIL, s.to_string()))?;
+            let ir_src = read_ir(text, language_flags)
+                .map_err(|s| EvalErr::InternalError(NodePtr::NIL, s.to_string()))?;
             assembled_sexp = assemble_from_ir(allocator, Rc::new(ir_src))?;
         }
 

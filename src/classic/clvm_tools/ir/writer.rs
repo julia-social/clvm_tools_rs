@@ -30,10 +30,7 @@ impl IROutputIterator {
     }
 }
 
-fn output_with_radix(
-    bits: usize,
-    bytes: &[u8],
-) -> Vec<u8> {
+fn output_with_radix(bits: usize, bytes: &[u8]) -> Vec<u8> {
     let mut result = Vec::default();
     let raw_content_bits = 8 * bytes.len();
     let digit_mask = (1 << bits) - 1;
@@ -103,14 +100,20 @@ impl Iterator for IROutputIterator {
                     }
                     IRRepr::Octal(o) => {
                         if (self.language_flags & NEW_BIT_CONSTANTS) != 0 {
-                            return Some("0o".to_string() + &String::from_utf8_lossy(&output_with_radix(3, &o.data())));
+                            return Some(
+                                "0o".to_string()
+                                    + &String::from_utf8_lossy(&output_with_radix(3, &o.data())),
+                            );
                         }
 
                         return Some("0x".to_string() + &o.hex());
                     }
                     IRRepr::Binary(b) => {
                         if (self.language_flags & NEW_BIT_CONSTANTS) != 0 {
-                            return Some("0b".to_string() + &String::from_utf8_lossy(&output_with_radix(1, &b.data())));
+                            return Some(
+                                "0b".to_string()
+                                    + &String::from_utf8_lossy(&output_with_radix(1, &b.data())),
+                            );
                         }
 
                         return Some("0x".to_string() + &b.hex());
