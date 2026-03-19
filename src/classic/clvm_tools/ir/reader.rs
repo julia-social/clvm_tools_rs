@@ -184,6 +184,13 @@ pub fn bitwise_constant(bits: u32, chars: &[u8], force_byte: bool) -> Result<Vec
 
 pub fn interpret_atom_value(chars: &[u8], language_flags: u32) -> Result<IRRepr, SyntaxErr> {
     // The Decimal and Hex representation of atoms in the program
+    let all_int_digits = || {
+        String::from_utf8(chars.to_vec())
+            .ok()
+            .and_then(|s| s.parse::<Number>().ok())
+            .map(|n| bigint_to_bytes_clvm(&n))
+    };
+
     if chars.is_empty() {
         Ok(IRRepr::Null)
     } else if new_bit_constants(language_flags) && !chars.is_empty() && chars[0] == b'0' {
@@ -198,16 +205,17 @@ pub fn interpret_atom_value(chars: &[u8], language_flags: u32) -> Result<IRRepr,
                 "too short numeric constant starting with '0'".to_string(),
             ));
         }
-        match chars[1] {
-            b'b' | b'B' => Ok(IRRepr::Binary(Bytes::new(Some(BytesFromType::Raw(
+        match (chars[1], all_int_digits()) {
+            (b'b', _) | (b'B', _) => Ok(IRRepr::Binary(Bytes::new(Some(BytesFromType::Raw(
                 bitwise_constant(1, &chars[2..], false)?,
             ))))),
-            b'o' | b'O' => Ok(IRRepr::Octal(Bytes::new(Some(BytesFromType::Raw(
+            (b'o', _) | (b'O', _) => Ok(IRRepr::Octal(Bytes::new(Some(BytesFromType::Raw(
                 bitwise_constant(3, &chars[2..], false)?,
             ))))),
-            b'x' | b'X' => Ok(IRRepr::Hex(Bytes::new(Some(BytesFromType::Raw(
+            (b'x', _) | (b'X', _) => Ok(IRRepr::Hex(Bytes::new(Some(BytesFromType::Raw(
                 bitwise_constant(4, &chars[2..], true)?,
             ))))),
+            (b'0', Some(decimal)) => Ok(IRRepr::Int(decimal, true)),
             _ => Err(SyntaxErr::new(format!(
                 "malformed int or bit constant '{}'",
                 String::from_utf8_lossy(chars)
@@ -227,11 +235,7 @@ pub fn interpret_atom_value(chars: &[u8], language_flags: u32) -> Result<IRRepr,
 
         Bytes::new_validated(Some(UnvalidatedBytesFromType::Hex(string_bytes.decode())))
             .map(IRRepr::Hex)
-    } else if let Some(n) = String::from_utf8(chars.to_vec())
-        .ok()
-        .and_then(|s| s.parse::<Number>().ok())
-        .map(|n| bigint_to_bytes_clvm(&n))
-    {
+    } else if let Some(n) = all_int_digits() {
         Ok(IRRepr::Int(n, true))
     } else {
         let string_bytes = Bytes::new(Some(BytesFromType::Raw(chars.to_vec())));
