@@ -99,7 +99,7 @@ pub fn compile_clvm_text_maybe_opt(
 ) -> Result<NodePtr, CompileError> {
     let ir_src =
         read_ir(text, 0).map_err(|s| EvalErr::InternalError(NodePtr::NIL, s.to_string()))?;
-    let assembled_sexp = assemble_from_ir(allocator, Rc::new(ir_src))?;
+    let mut assembled_sexp = assemble_from_ir(allocator, Rc::new(ir_src))?;
 
     let dialect = detect_modern(allocator, assembled_sexp);
     // Now the stepping is optional (None for classic) but we may communicate
@@ -130,6 +130,12 @@ pub fn compile_clvm_text_maybe_opt(
         } else {
             0
         };
+        // Ensure we re-parse with the flags detected during sigil detection.
+        if language_flags != 0 {
+            let ir_src =
+                read_ir(text, language_flags).map_err(|s| EvalErr::InternalError(NodePtr::NIL, s.to_string()))?;
+            assembled_sexp = assemble_from_ir(allocator, Rc::new(ir_src))?;
+        }
 
         let compile_invoke_code = run(allocator);
         let input_sexp = allocator.new_pair(assembled_sexp, NodePtr::NIL)?;

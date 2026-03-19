@@ -232,11 +232,11 @@ fn test_fuzz_bit_constants() {
 
         assert_eq!(expected_length, atom_data.len());
 
-        // The content should be what we expect.
         if atom_data.is_empty() {
             return;
         }
 
+        // The content should be what we expect.
         for (i, digit) in digits.iter().rev().enumerate() {
             let raw_bit_offset = i * bits;
             let bit_offset = raw_bit_offset % 8;

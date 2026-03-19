@@ -1,8 +1,6 @@
 use std::borrow::Borrow;
 use std::rc::Rc;
 
-use to_binary::BinaryString;
-
 use crate::classic::clvm::__type_compatibility__::{Bytes, BytesFromType, Stream};
 use crate::classic::clvm::casts::{bigint_from_bytes, TConvertOption};
 
@@ -30,6 +28,44 @@ impl IROutputIterator {
             language_flags: flags,
         }
     }
+}
+
+fn output_with_radix(
+    bits: usize,
+    bytes: &[u8],
+) -> Vec<u8> {
+    let mut result = Vec::default();
+    let raw_content_bits = 8 * bytes.len();
+    let digit_mask = (1 << bits) - 1;
+    let digits = (raw_content_bits + bits) / bits;
+    let digit_bits = bits * digits;
+    let mut buffer_bit = digit_bits % 8;
+    let mut buffer: u32 = 0;
+    // If the leftmost byte is zero, then we must include an octal digit that's
+    // completely inside it.
+    if bytes[0] == 0 {
+        result.push(b'0');
+    }
+    let mut produce_output = false;
+    for byte in bytes.iter() {
+        buffer = (buffer << 8) | *byte as u32;
+        buffer_bit += 8;
+        while buffer_bit >= bits {
+            buffer_bit -= bits;
+            let digit_value = (buffer >> buffer_bit) & digit_mask;
+            if digit_value != 0 {
+                produce_output = true;
+            }
+            if produce_output {
+                result.push(b'0' + (digit_value as u8));
+            }
+        }
+        // Regardless of anything else, start producing output on the second
+        // byte.
+        produce_output = true;
+    }
+
+    result
 }
 
 impl Iterator for IROutputIterator {
@@ -67,40 +103,14 @@ impl Iterator for IROutputIterator {
                     }
                     IRRepr::Octal(o) => {
                         if (self.language_flags & NEW_BIT_CONSTANTS) != 0 {
-                            let mut buffer: u16 = 0;
-                            let mut buffer_bits: usize = 0;
-                            let mut output_vec = Vec::new();
-
-                            let spill_bits =
-                                |buffer: &mut u16,
-                                 buffer_bits: &mut usize,
-                                 output_vec: &mut Vec<u8>,
-                                 while_zero: bool| {
-                                    while *buffer_bits >= 3 && (*buffer != 0 || while_zero) {
-                                        output_vec.push(b'0' + (*buffer & 7) as u8);
-                                        *buffer >>= 3;
-                                        *buffer_bits -= 3;
-                                    }
-                                };
-
-                            for byte in o.data().iter().rev() {
-                                buffer <<= 8;
-                                buffer |= *byte as u16;
-                                buffer_bits += 8;
-                                spill_bits(&mut buffer, &mut buffer_bits, &mut output_vec, true);
-                            }
-
-                            spill_bits(&mut buffer, &mut buffer_bits, &mut output_vec, false);
-
-                            return Some("0o".to_string() + &String::from_utf8_lossy(&output_vec));
+                            return Some("0o".to_string() + &String::from_utf8_lossy(&output_with_radix(3, &o.data())));
                         }
 
                         return Some("0x".to_string() + &o.hex());
                     }
                     IRRepr::Binary(b) => {
                         if (self.language_flags & NEW_BIT_CONSTANTS) != 0 {
-                            let bdata: &[u8] = b.data();
-                            return Some("0b".to_string() + &BinaryString::from(bdata).to_string());
+                            return Some("0b".to_string() + &String::from_utf8_lossy(&output_with_radix(1, &b.data())));
                         }
 
                         return Some("0x".to_string() + &b.hex());
