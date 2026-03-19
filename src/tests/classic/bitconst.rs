@@ -7,11 +7,10 @@ use rand_chacha::ChaCha8Rng;
 use crate::tests::classic::run::{do_basic_brun, do_basic_run};
 
 use crate::classic::clvm::sexp::atom;
-use crate::classic::clvm_tools::binutils::assemble_from_ir;
+use crate::classic::clvm_tools::binutils::{assemble_from_ir, disassemble};
 use crate::classic::clvm_tools::ir::r#type::NEW_BIT_CONSTANTS;
 use crate::classic::clvm_tools::ir::reader::read_ir;
 use crate::classic::clvm_tools::ir::writer::write_ir;
-use crate::compiler::sexp::decode_string;
 
 #[test]
 fn test_binary_numeric_constant_classic_0() {
@@ -183,7 +182,11 @@ fn test_binary_numeric_constant_modern_5() {
 fn test_fuzz_bit_constants() {
     let allowed_digits = b"0123456789abcdef";
     let compile_run_prog = |sigil: &str, val: &[u8]| {
-        let prog_in = format!("(mod () (include {}) {})", sigil, decode_string(val));
+        let prog_in = format!(
+            "(mod () (include {}) {})",
+            sigil,
+            String::from_utf8_lossy(val)
+        );
         let prog_out = do_basic_run(&vec!["run".to_string(), prog_in]);
         do_basic_brun(&vec!["brun".to_string(), prog_out])
     };
@@ -200,19 +203,23 @@ fn test_fuzz_bit_constants() {
             .unwrap()
     };
 
-    let eval_const = |bits: usize, digits: &[u8], result: &str| {
+    let eval_const = |bits: usize, digits_vec: &[u8], result: &str| {
         let mut allocator = Allocator::new();
-        eprintln!("testing {result}");
-        let ir_repr = Rc::new(read_ir(result, NEW_BIT_CONSTANTS).unwrap());
-
+        let original_string = String::from_utf8_lossy(digits_vec);
+        eprintln!("testing {result} <- {original_string}");
+        let ir_repr = Rc::new(read_ir(&original_string, NEW_BIT_CONSTANTS).unwrap());
         // Check ir writer.
-        let reproduced = write_ir(ir_repr.clone(), NEW_BIT_CONSTANTS);
-        assert_eq!(result.trim(), reproduced);
+        let reproduced_from_ir = write_ir(ir_repr.clone(), NEW_BIT_CONSTANTS);
+        assert_eq!(original_string, reproduced_from_ir);
 
         // Check assembly layer.
         let assembled = assemble_from_ir(&mut allocator, ir_repr.clone()).unwrap();
+        let disassembled = disassemble(&mut allocator, assembled, None);
+        assert_eq!(result.trim(), disassembled);
+
         let atom_data = atom(&allocator, assembled).unwrap();
         // The length should be what we expect.
+        let digits = &digits_vec[2..];
         let rounded_up_bytes = ((digits.len() * bits) + 7) / 8;
         let rounded_down_bytes = (digits.len() * bits) / 8;
         let bits_from_left = find_digit_value(digits[0]);
@@ -222,6 +229,7 @@ fn test_fuzz_bit_constants() {
         } else {
             bits_from_left >> bits - high_byte_overhang
         };
+
         let expected_length = if (digits[0] == b'0' && digits.len() == 1 && bits != 4)
             || (high_byte_overhang < bits && high_byte_bits == 0)
         {
@@ -260,6 +268,43 @@ fn test_fuzz_bit_constants() {
         }
     };
 
+    let merge_left_pad_zeros = |bits: usize, digit_vec: &mut Vec<u8>| {
+        // Hex constants always decode to a multiple of 2 digits.
+        if bits == 4 {
+            if !digit_vec.len().is_multiple_of(2) {
+                digit_vec.insert(2, b'0');
+            }
+            return;
+        }
+
+        loop {
+            if digit_vec.len() <= 3 {
+                return;
+            }
+
+            let provided_bits = (digit_vec.len() - 2) * bits;
+            let start_byte_of_top_digit = (provided_bits - bits) / 8;
+            let bits_into_left_byte = (provided_bits - bits) - (start_byte_of_top_digit * 8);
+            // Last 2 zeros of last byte.
+            if digit_vec.len() == 4 && digit_vec.iter().skip(2).take(2).all(|b| *b == b'0') {
+                return;
+            }
+
+            let bits_in_byte_for_2_digits = ((find_digit_value(digit_vec[2])
+                << 8 + bits_into_left_byte)
+                | (find_digit_value(digit_vec[3]) << 8 + bits_into_left_byte - bits))
+                >> 8;
+            if (bits_in_byte_for_2_digits != 0 && digit_vec[2] == b'0')
+                || (bits_in_byte_for_2_digits == 0 && bits_into_left_byte >= bits)
+            {
+                digit_vec.remove(2);
+                continue;
+            }
+
+            return;
+        }
+    };
+
     let do_test = |sigil: &str| {
         let mut digit_vec = Vec::new();
         let rng_seed: [u8; 32] = [0; 32];
@@ -281,7 +326,8 @@ fn test_fuzz_bit_constants() {
                 for use_digit in allowed_digits[0..(1 << d.0)].iter() {
                     digit_vec.pop();
                     digit_vec.push(*use_digit);
-                    eval_const(d.0, &digit_vec[2..], &compile_run_prog(sigil, &digit_vec));
+                    merge_left_pad_zeros(d.0, &mut digit_vec);
+                    eval_const(d.0, &digit_vec, &compile_run_prog(sigil, &digit_vec));
                 }
 
                 // All zeroes
@@ -289,14 +335,18 @@ fn test_fuzz_bit_constants() {
                     digit_vec[i] = b'0';
                 }
 
-                eval_const(d.0, &digit_vec[2..], &compile_run_prog(sigil, &digit_vec));
+                // If 2 consecutive octal or binary digits are in the same byte, then they'll get
+                // merged.
+                merge_left_pad_zeros(d.0, &mut digit_vec);
+                eval_const(d.0, &digit_vec, &compile_run_prog(sigil, &digit_vec));
 
                 // Random digits
                 for i in 2..digit_vec.len() {
                     digit_vec[i] = choose_random(&mut randomizer, &allowed_digits[0..(1 << d.0)]);
                 }
 
-                eval_const(d.0, &digit_vec[2..], &compile_run_prog(sigil, &digit_vec));
+                merge_left_pad_zeros(d.0, &mut digit_vec);
+                eval_const(d.0, &digit_vec, &compile_run_prog(sigil, &digit_vec));
 
                 digit_vec.push(b'0');
             }

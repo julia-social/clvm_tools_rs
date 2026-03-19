@@ -38,20 +38,29 @@ fn output_with_radix(bits: usize, bytes: &[u8]) -> Vec<u8> {
     let digit_bits = bits * digits;
     let mut buffer_bit = digit_bits % 8;
     let mut buffer: u32 = 0;
-    // If the leftmost byte is zero, then we must include an octal digit that's
-    // completely inside it.
-    if bytes[0] == 0 {
+
+    if bytes.is_empty() {
         result.push(b'0');
+        return result;
     }
+
+    // If the leftmost byte is zero, then we must include a binary or octal digit
+    // to indicate that it should be padded.
+    let need_padding = bytes[0] == 0;
+
     let mut produce_output = false;
+
     for byte in bytes.iter() {
         buffer = (buffer << 8) | *byte as u32;
         buffer_bit += 8;
         while buffer_bit >= bits {
             buffer_bit -= bits;
             let digit_value = (buffer >> buffer_bit) & digit_mask;
-            if digit_value != 0 {
+            if digit_value != 0 || need_padding && !produce_output && buffer_bit < bits {
                 produce_output = true;
+                if need_padding {
+                    result.push(b'0');
+                }
             }
             if produce_output {
                 result.push(b'0' + (digit_value as u8));
