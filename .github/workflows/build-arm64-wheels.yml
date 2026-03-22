@@ -45,7 +45,7 @@ jobs:
         pip install maturin==1.10.2
         CC=gcc maturin build --release --strip --manylinux 2_28
     - name: Upload artifacts
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: wheels
         path: target/wheels/
