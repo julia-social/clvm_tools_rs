@@ -500,8 +500,8 @@ pub fn compile_module(
 
 fn form_hash_expression(inner_exp: Rc<BodyForm>) -> Rc<BodyForm> {
     let shloc = Srcloc::start("*sha256tree*");
-    let parsed =
-        parse_sexp(shloc.clone(), SHA256TREE_PROGRAM_CLVM.bytes()).expect("should have parsed");
+    let parsed = parse_sexp_flags(shloc.clone(), SHA256TREE_PROGRAM_CLVM.bytes(), 0)
+        .expect("should have parsed");
     let p0_borrowed: &SExp = parsed[0].borrow();
 
     Rc::new(BodyForm::Call(
