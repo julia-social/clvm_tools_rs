@@ -287,16 +287,16 @@ impl Preprocessor {
                             mdata.args.clone(),
                         )?;
 
-                        let mut context = BasicCompileContext {
-                            allocator: Allocator::new(),
-                            runner: self.runner.clone(),
-                            symbols: HashMap::new(),
-                            optimizer: get_optimizer(&body.loc(), self.opts.clone())?,
-                        };
                         let compiled_program =
                             if let Some(compiled_program) = self.stored_macros.get(&mdata.name) {
                                 compiled_program.clone()
                             } else {
+                                let mut context = BasicCompileContext::new(
+                                    Allocator::new(),
+                                    self.runner.clone(),
+                                    HashMap::new(),
+                                    get_optimizer(&body.loc(), self.opts.clone())?,
+                                );
                                 // as inline defuns because they're closest to that
                                 // semantically.
                                 let new_program = CompileForm {
@@ -324,7 +324,7 @@ impl Preprocessor {
 
                         let ppext: &PreprocessorExtension = self.ppext.borrow();
                         let res = clvm::run(
-                            context.allocator(),
+                            &mut Allocator::new(),
                             self.runner.clone(),
                             self.opts.prim_map(),
                             compiled_program,
