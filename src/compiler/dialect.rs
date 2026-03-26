@@ -14,7 +14,7 @@ pub const OPT_STRATEGY_BASE_STEPPING: i32 = 23;
 pub const MAX_STEPPING: i32 = 25;
 
 /// Specifying how the language is spoken.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AcceptedDialect {
     pub stepping: Option<i32>,
     pub strict: bool,
@@ -211,7 +211,7 @@ pub fn detect_modern(allocator: &mut Allocator, sexp: NodePtr) -> AcceptedDialec
 
         for elt in l.iter() {
             let detect_modern_result = detect_modern(allocator, *elt);
-            if detect_modern_result.stepping.is_some() {
+            if detect_modern_result != result {
                 result = detect_modern_result;
                 break;
             }
