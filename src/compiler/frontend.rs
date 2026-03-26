@@ -697,6 +697,8 @@ fn match_op_name_4(pl: &[SExp]) -> Option<OpName4Match> {
     }
 }
 
+/// Produce a helperform from a namespace.  This acts as a storage container for helpers that
+/// can later be resolved via module resolution.
 pub fn compile_namespace(
     opts: Rc<dyn CompilerOpts>,
     loc: Srcloc,
@@ -737,6 +739,9 @@ pub fn compile_namespace(
     })))
 }
 
+/// Add a namespace reference from an input form.  These specify namespaces to use when adding
+/// helper forms.  A namespaced program is rewritten so that every helper has a fully resolved
+/// name.
 pub fn compile_nsref(loc: Srcloc, internal: &[SExp]) -> Result<HelperForm, CompileErr> {
     if internal.len() < 2 {
         return Err(CompileErr(
@@ -745,12 +750,12 @@ pub fn compile_nsref(loc: Srcloc, internal: &[SExp]) -> Result<HelperForm, Compi
         ));
     }
 
-    let import_spec = ModuleImportSpec::parse(loc.clone(), internal[0].loc(), internal, 1)?;
+    let import_spec = ModuleImportSpec::parse(loc.clone(), internal, 1)?;
     if let ModuleImportSpec::Qualified(q) = &import_spec {
         return Ok(HelperForm::Defnsref(Box::new(NamespaceRefData {
             loc,
             kw: internal[0].loc(),
-            nl: internal[1].loc(),
+            nl: q.nl.clone(),
             rendered_name: q.name.as_u8_vec(LongNameTranslation::Namespace),
             longname: q.name.clone(),
             specification: import_spec.clone(),

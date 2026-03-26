@@ -31,17 +31,21 @@ fn capture_scope(in_scope: &mut HashSet<Vec<u8>>, args: Rc<SExp>) {
     }
 }
 
-pub struct FindNamespaceLookingAtHelpers<'a> {
+struct FindNamespaceLookingAtHelpers<'a> {
     hlist: &'a [HelperForm],
     namespace: Option<&'a ImportLongName>,
     offset: usize,
 }
 
+/// An iterator which finds all the reachable helpers in a namespaced program, allowing them
+/// to be selected via outside criteria.
 pub struct TourNamespaces<'a> {
     helpers: &'a [HelperForm],
     look_stack: Vec<FindNamespaceLookingAtHelpers<'a>>,
 }
 
+/// Gives a candidate helper to match a given name in a namespace, fully specifying the source
+/// and original name.
 pub struct FoundHelper<'a> {
     pub helpers: &'a [HelperForm],
     pub namespace: Option<&'a ImportLongName>,
@@ -70,6 +74,10 @@ impl<'a> Iterator for TourNamespaces<'a> {
             self.look_stack[ls_at].offset += 1;
 
             if let HelperForm::Defnamespace(ns) = current {
+                // Note: the scope stack here is to return to the current namespace
+                // to continue resolving helpers.  Namespaces act independently as
+                // providers of named helpers in the namespace they individually
+                // identify.
                 self.look_stack.push(FindNamespaceLookingAtHelpers {
                     hlist: &ns.helpers,
                     namespace: Some(&ns.longname),
@@ -87,6 +95,7 @@ impl<'a> Iterator for TourNamespaces<'a> {
     }
 }
 
+/// Given a helper, rewrite its name to reflect the original source.
 fn namespace_helper(name: &ImportLongName, value: &HelperForm) -> HelperForm {
     match value {
         HelperForm::Defun(inline, dd) => HelperForm::Defun(
@@ -108,6 +117,7 @@ fn namespace_helper(name: &ImportLongName, value: &HelperForm) -> HelperForm {
     }
 }
 
+/// Produce a traversal of all reachable helpers in the program.
 pub fn tour_helpers(helpers: &[HelperForm]) -> TourNamespaces<'_> {
     TourNamespaces {
         helpers,
@@ -119,12 +129,6 @@ pub fn tour_helpers(helpers: &[HelperForm]) -> TourNamespaces<'_> {
     }
 }
 
-pub fn rename_args_named_helper(
-    pair: (ImportLongName, HelperForm),
-) -> Result<(ImportLongName, HelperForm), CompileErr> {
-    Ok((pair.0.clone(), rename_args_helperform(&pair.1)?))
-}
-
 fn exposed_name_matches(exposed: &ModuleImportListedName, orig_name: &[u8]) -> bool {
     if let Some(alias) = exposed.alias.as_ref() {
         orig_name == alias
@@ -133,7 +137,9 @@ fn exposed_name_matches(exposed: &ModuleImportListedName, orig_name: &[u8]) -> b
     }
 }
 
-pub fn is_macro_name(name: &ImportLongName) -> bool {
+/// Macros are renamed during preprocessing, so determine whether the name given is the rename
+/// of a macro.
+fn is_macro_name(name: &ImportLongName) -> bool {
     if name.components.is_empty() {
         return false;
     }
@@ -141,7 +147,9 @@ pub fn is_macro_name(name: &ImportLongName) -> bool {
     name.components[name.components.len() - 1].starts_with(b"__chia__defmac__")
 }
 
-pub fn find_helper_target(
+/// Main function which resolves a given short name to a helper retrieved from somewhere in the
+/// namespace tree, given the import directives that are active in the current namespace.
+fn find_helper_target(
     opts: Rc<dyn CompilerOpts>,
     helpers: &[HelperForm],
     parent_ns: Option<&ImportLongName>,
@@ -203,7 +211,7 @@ pub fn find_helper_target(
                             orig_name,
                             &target_name,
                         )? {
-                            return Ok(Some(rename_args_named_helper(helper)?));
+                            return Ok(Some(helper));
                         }
                     }
                 } else {
@@ -217,7 +225,7 @@ pub fn find_helper_target(
                             orig_name,
                             &target_name,
                         )? {
-                            return Ok(Some(rename_args_named_helper(helper)?));
+                            return Ok(Some(helper));
                         }
                     }
                 }
@@ -246,7 +254,7 @@ pub fn find_helper_target(
                             orig_name,
                             &target_name,
                         )? {
-                            return Ok(Some(rename_args_named_helper(helper)?));
+                            return Ok(Some(helper));
                         }
                     }
                 }
@@ -269,7 +277,7 @@ pub fn find_helper_target(
                     orig_name,
                     &target_name,
                 )? {
-                    return Ok(Some(rename_args_named_helper(helper)?));
+                    return Ok(Some(helper));
                 }
             }
         }
@@ -311,6 +319,7 @@ fn add_binding_names(bindings: &mut HashSet<Vec<u8>>, pattern: &BindingPattern) 
     }
 }
 
+/// Given an expression, fully resolve needed helpers from namespaces if needed.
 fn resolve_namespaces_in_expr(
     resolved_helpers: &mut BTreeMap<ImportLongName, HelperForm>,
     opts: Rc<dyn CompilerOpts>,
@@ -465,7 +474,7 @@ fn resolve_namespaces_in_expr(
                 add_binding_names(&mut new_scope, &b.pattern);
             }
             Ok(Rc::new(BodyForm::Let(
-                LetFormKind::Sequential,
+                LetFormKind::Parallel,
                 Box::new(LetData {
                     bindings: new_bindings,
                     body: resolve_namespaces_in_expr(
@@ -482,7 +491,7 @@ fn resolve_namespaces_in_expr(
         }
         BodyForm::Let(LetFormKind::Assign, ld) => {
             let mut new_scope = in_scope.clone();
-            let mut new_bindings = Vec::new();
+            let mut new_bindings = ld.bindings.clone();
             let sorted_bindings = toposort_assign_bindings(&expr.loc(), &ld.bindings)?;
             for b in sorted_bindings.iter() {
                 let b_borrowed: &Binding = ld.bindings[b.index].borrow();
@@ -497,7 +506,7 @@ fn resolve_namespaces_in_expr(
                     )?,
                     ..b_borrowed.clone()
                 };
-                new_bindings.push(Rc::new(new_binding));
+                new_bindings[b.index] = Rc::new(new_binding);
                 add_binding_names(&mut new_scope, &b_borrowed.pattern);
             }
             Ok(Rc::new(BodyForm::Let(
@@ -546,6 +555,7 @@ fn resolve_namespaces_in_expr(
     }
 }
 
+/// Given a helper, fully resolve needed imported helpers from other namespaces.
 fn resolve_namespaces_in_helper(
     resolved_helpers: &mut BTreeMap<ImportLongName, HelperForm>,
     opts: Rc<dyn CompilerOpts>,
@@ -555,12 +565,6 @@ fn resolve_namespaces_in_helper(
 ) -> Result<HelperForm, CompileErr> {
     match helper {
         HelperForm::Defnamespace(ns) => {
-            let combined_ns = if let Some(p) = parent_ns {
-                p.combine(&ns.longname)
-            } else {
-                ns.longname.clone()
-            };
-
             let mut result_helpers = Vec::new();
 
             for h in ns.helpers.iter() {
@@ -568,7 +572,7 @@ fn resolve_namespaces_in_helper(
                     resolved_helpers,
                     opts.clone(),
                     program,
-                    Some(&combined_ns),
+                    Some(&ns.longname),
                     h,
                 )?;
                 result_helpers.push(newly_created);
@@ -621,6 +625,8 @@ fn resolve_namespaces_in_helper(
     }
 }
 
+/// Given a program containing namespaces and namespace references, rewrite it so that any impoted
+/// helpers from outside namespaces have fully qualified names and include them in the program.
 pub fn resolve_namespaces(
     opts: Rc<dyn CompilerOpts>,
     program: &CompileForm,
@@ -655,21 +661,6 @@ pub fn resolve_namespaces(
 
             let renamed_helper = namespace_helper(name, helper);
 
-            // This is ugly but working: if we have phantom type helpers, we
-            // add their individual names as well with no outputs.  This allows
-            // the type to be fully expanded each time and each helper to
-            // individally ensure that it's only emitted once.
-            let full_name = if let Some(p) = parent.as_ref() {
-                p.with_child(renamed_helper.name())
-            } else {
-                let (_, parsed) = ImportLongName::parse(renamed_helper.name());
-                parsed
-            };
-
-            if resolved_helpers.contains_key(&full_name) {
-                continue;
-            }
-
             let result = resolve_namespaces_in_helper(
                 &mut round_resolved_helpers,
                 opts.clone(),
@@ -678,7 +669,6 @@ pub fn resolve_namespaces(
                 &renamed_helper,
             )?;
 
-            resolved_helpers.remove(&full_name);
             resolved_helpers.insert(name.clone(), result.clone());
         }
         swap(&mut new_resolved_helpers, &mut round_resolved_helpers);
