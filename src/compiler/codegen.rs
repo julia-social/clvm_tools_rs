@@ -212,7 +212,8 @@ fn create_name_lookup_(
                 create_name_lookup_(l.clone(), name, env.clone(), head.clone())
                     .map(|v| Ok(2_u32.to_bigint().unwrap() * v))
                     .unwrap_or_else(|_| {
-                        create_name_lookup_(l.clone(), name, env, rest.clone()).map(|v| 2_u32.to_bigint().unwrap() * v + bi_one()) 
+                        create_name_lookup_(l.clone(), name, env, rest.clone())
+                            .map(|v| 2_u32.to_bigint().unwrap() * v + bi_one())
                     })
             }
         }
@@ -312,7 +313,7 @@ fn stepping_round_to_i64(opts: Rc<dyn CompilerOpts>, n: Number) -> Number {
         }
     }
 
-    return n;
+    n
 }
 
 // Note that renaming has taken place before code generation, so there won't be any shadowing.
