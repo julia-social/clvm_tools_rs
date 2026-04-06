@@ -2726,12 +2726,6 @@ fn test_big_env_program_overflow_and_fix() {
     let program = do_basic_run(&vec!["run".to_string(), big_env_as_cl24]);
     let program_result = do_basic_brun(&vec!["brun".to_string(), program.clone()]);
 
-    // Note that the program selects with a too-short path.
-    assert_eq!(
-        program_result.trim(),
-        "(q (((all . 35) (softfork . 37) (38 . 39) (40 . 41)) 3 (i 3)))"
-    );
-
     let mut allocator = Allocator::new();
     let generated_program = assemble(&mut allocator, &program).unwrap();
     let mut stream_out = Stream::new(None);
@@ -2750,4 +2744,11 @@ fn test_big_env_program_overflow_and_fix() {
     // Correct output:
     // (list X1=1 B59=(list R37=(f (f (r (f (r (T = a tree of 0..63))))))=(c 40 41) A6=X3=3 B20=...(list A13=...X3=3 A14=...X3=3))
     assert_eq!(result.trim(), "(q ((40 . 41) 3 (i 3)))");
+
+    // Wrong output:
+    // Note that the program selects with a too-short path, selecting too much for R37.
+    assert_eq!(
+        program_result.trim(),
+        "(q (((all . 35) (softfork . 37) (38 . 39) (40 . 41)) 3 (i 3)))"
+    );
 }
