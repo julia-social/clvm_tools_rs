@@ -2720,14 +2720,31 @@ fn test_ensure_dereferenceable_6() {
 fn test_big_env_program_overflow_and_fix() {
     let big_env_overflow_program =
         fs::read_to_string("./resources/tests/test-env-overflow.clsp").unwrap();
+    let compile_and_run = |program| {
+        let clvm_output = do_basic_run(&vec!["run".to_string(), program]);
+        let result = do_basic_brun(&vec!["brun".to_string(), clvm_output.clone()]);
+        (clvm_output, result)
+    };
     let big_env_as_cl24 = big_env_overflow_program
         .replace("standard-cl-26", "standard-cl-24")
         .to_string();
-    let program = do_basic_run(&vec!["run".to_string(), big_env_as_cl24]);
-    let program_result = do_basic_brun(&vec!["brun".to_string(), program.clone()]);
+    let (compiled_24, result_24) = compile_and_run(big_env_as_cl24);
+    let (_compiled_26, result_26) = compile_and_run(big_env_overflow_program);
 
+    // Correct output:
+    // (list X1=1 B59=(list R37=(f (f (r (f (r (T = a tree of 0..63))))))=(c 40 41) A6=X3=3 B20=...(list A13=...X3=3 A14=...X3=3))
+    assert_eq!(result_26.trim(), "(q ((40 . 41) 3 (i 3)))");
+
+    // Wrong output:
+    // Note that the program selects with a too-short path, selecting too much for R37.
+    assert_eq!(
+        result_24.trim(),
+        "(q (((all . 35) (softfork . 37) (38 . 39) (40 . 41)) 3 (i 3)))"
+    );
+
+    // Check that we got the old representation from cl24 based on a captured compile.
     let mut allocator = Allocator::new();
-    let generated_program = assemble(&mut allocator, &program).unwrap();
+    let generated_program = assemble(&mut allocator, &compiled_24).unwrap();
     let mut stream_out = Stream::new(None);
     sexp_to_stream(&mut allocator, generated_program, &mut stream_out);
     let generated_program_hex = hex::encode(&stream_out.get_value().data());
@@ -2736,19 +2753,5 @@ fn test_big_env_program_overflow_and_fix() {
     assert_eq!(
         generated_program_hex.trim(),
         program_from_earlier_chialisp_hex.trim()
-    );
-
-    let program_26 = do_basic_run(&vec!["run".to_string(), big_env_overflow_program]);
-    let result = do_basic_brun(&vec!["brun".to_string(), program_26]);
-
-    // Correct output:
-    // (list X1=1 B59=(list R37=(f (f (r (f (r (T = a tree of 0..63))))))=(c 40 41) A6=X3=3 B20=...(list A13=...X3=3 A14=...X3=3))
-    assert_eq!(result.trim(), "(q ((40 . 41) 3 (i 3)))");
-
-    // Wrong output:
-    // Note that the program selects with a too-short path, selecting too much for R37.
-    assert_eq!(
-        program_result.trim(),
-        "(q (((all . 35) (softfork . 37) (38 . 39) (40 . 41)) 3 (i 3)))"
     );
 }
