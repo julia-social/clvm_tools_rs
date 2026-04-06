@@ -305,11 +305,13 @@ fn lambda_for_defun(loc: Srcloc, lookup: Rc<SExp>) -> Rc<SExp> {
 }
 
 // Earlier, the paths had been i64 in here (my early mistake).
-// This corrects it while preserving the way prior versions worked.
-fn stepping_round_to_i64(opts: Rc<dyn CompilerOpts>, n: Number) -> Number {
+// This corrects it while preserving the way prior versions worked.  This is tested in
+// test_big_env_program_overflow_and_fix.
+fn early_stepping_truncate_to_u64(opts: Rc<dyn CompilerOpts>, n: Number) -> Number {
     if let Some(stepping) = &opts.dialect().stepping {
         if *stepping < 26 {
-            return n & 0x7fffffffffffffff_i64.to_bigint().unwrap();
+            // Sign extend.
+            return n & 0xffffffffffffffff_u64.to_bigint().unwrap();
         }
     }
 
@@ -341,7 +343,7 @@ fn create_name_lookup(
                     let is_defun = is_defun_or_constant_in_codegen(compiler, name);
                     // Determine if it's a defun.  If so we can ensure that it's
                     // callable like a lambda by repeating the left env into it.
-                    let find_program = Rc::new(SExp::Integer(l.clone(), stepping_round_to_i64(opts.clone(), i)));
+                    let find_program = Rc::new(SExp::Integer(l.clone(), early_stepping_truncate_to_u64(opts.clone(), i)));
                     if matches!(as_variable, NameLookupType::ReferenceAsVariable) && matches!(is_defun, Some(EnvDefinitionStatus::IsDefun)) {
                         // It's a defun.  Harden the result so it is callable
                         // directly by the CLVM 'a' operator.

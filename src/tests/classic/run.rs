@@ -16,7 +16,8 @@ use std::rc::Rc;
 use clvmr::allocator::Allocator;
 
 use crate::classic::clvm::__type_compatibility__::{bi_one, bi_zero, Stream};
-use crate::classic::clvm_tools::binutils::disassemble;
+use crate::classic::clvm::serialize::sexp_to_stream;
+use crate::classic::clvm_tools::binutils::{assemble, disassemble};
 use crate::classic::clvm_tools::cmds::launch_tool;
 use crate::classic::clvm_tools::node_path::NodePath;
 
@@ -2710,4 +2711,43 @@ fn test_ensure_dereferenceable_6() {
         "(mod (A B) (include *standard-cl-24*) (defun-inline F (A B) (assign X (if (@ B 1) (+ A B) (* A 3)) (* X 2))) (F A (+ A 13)))".to_string(),
     ]);
     assert!(program.trim().contains("resembles an environment parent"));
+}
+
+// A program constructed with a fairly large environment led to an overflow in the oldest part of
+// codegen, where an i64 had been used for env path finding.  It is easy to fix, and this ensures
+// both that the program does what's desired and that the old form of the output is preserved.
+#[test]
+fn test_big_env_program_overflow_and_fix() {
+    let big_env_overflow_program =
+        fs::read_to_string("./resources/tests/test-env-overflow.clsp").unwrap();
+    let big_env_as_cl24 = big_env_overflow_program
+        .replace("standard-cl-26", "standard-cl-24")
+        .to_string();
+    let program = do_basic_run(&vec!["run".to_string(), big_env_as_cl24]);
+    let program_result = do_basic_brun(&vec!["brun".to_string(), program.clone()]);
+
+    // Note that the program selects with a too-short path.
+    assert_eq!(
+        program_result.trim(),
+        "(q (((all . 35) (softfork . 37) (38 . 39) (40 . 41)) 3 (i 3)))"
+    );
+
+    let mut allocator = Allocator::new();
+    let generated_program = assemble(&mut allocator, &program).unwrap();
+    let mut stream_out = Stream::new(None);
+    sexp_to_stream(&mut allocator, generated_program, &mut stream_out);
+    let generated_program_hex = hex::encode(&stream_out.get_value().data());
+    let program_from_earlier_chialisp_hex =
+        fs::read_to_string("./resources/tests/test-env-overflow-cl24.hex").unwrap();
+    assert_eq!(
+        generated_program_hex.trim(),
+        program_from_earlier_chialisp_hex.trim()
+    );
+
+    let program_26 = do_basic_run(&vec!["run".to_string(), big_env_overflow_program]);
+    let result = do_basic_brun(&vec!["brun".to_string(), program_26]);
+
+    // Correct output:
+    // (list X1=1 B59=(list R37=(f (f (r (f (r (T = a tree of 0..63))))))=(c 40 41) A6=X3=3 B20=...(list A13=...X3=3 A14=...X3=3))
+    assert_eq!(result.trim(), "(q ((40 . 41) 3 (i 3)))");
 }
