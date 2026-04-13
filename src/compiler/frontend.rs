@@ -651,6 +651,10 @@ fn match_op_name_4(pl: &[SExp]) -> Option<OpName4Match> {
         return None;
     }
 
+    // Atomize ensures that the result is presented as an atom if possible.  This makes the parser
+    // a bit more forgiving when we're examining code that has round-tripped through traditional
+    // clvm, which happens when modern tools such as use check are used on classic programs.
+    // The modern frontend requires atom representation in positions 0 and 1 of helpers anyway.
     match &pl[0].atomize() {
         SExp::Atom(l, op_name) => {
             if pl.len() < 3 {
@@ -699,15 +703,30 @@ fn match_op_name_4(pl: &[SExp]) -> Option<OpName4Match> {
 
 /// Produce a helperform from a namespace.  This acts as a storage container for helpers that
 /// can later be resolved via module resolution.
+///
+/// Nobody will write this, but it is parsed and transits this representation:
+///
+/// (namespace Foo.Bar
+///    (defconst C 99)
+///    (defun F (X) ...)
+/// )
+///
+/// These are used at compile time as helper buckets which can be drawn from to reseolve
+/// external dependencies a lot like how object files are used during linking of native code.
+///
+/// Module style constructs a program that contains namespaces and then resolves them to
+/// construct a non-namespaced program where all helpers have fully qualified names.
 pub fn compile_namespace(
     opts: Rc<dyn CompilerOpts>,
     loc: Srcloc,
     internal: &[SExp],
 ) -> Result<HelperForm, CompileErr> {
+    // A namespace needs a keyword and a name.
     if internal.len() < 2 {
         return Err(CompileErr(loc, "Namespace must have a name".to_string()));
     }
 
+    // Its name should parse as a qualified name, even if it has only one component.
     let (_, parsed) = if let SExp::Atom(_, name) = &internal[1] {
         ImportLongName::parse(name)
     } else {
@@ -718,6 +737,7 @@ pub fn compile_namespace(
     };
 
     let mut helpers = Vec::new();
+    // Parse all helpers.
     for sexp in internal.iter().skip(2) {
         if let Some(h) = compile_helperform(opts.clone(), Rc::new(sexp.clone()))? {
             helpers.push(h.clone());
@@ -742,6 +762,15 @@ pub fn compile_namespace(
 /// Add a namespace reference from an input form.  These specify namespaces to use when adding
 /// helper forms.  A namespaced program is rewritten so that every helper has a fully resolved
 /// name.
+///
+/// An nsref is in one of these forms:
+///   (import Foo.Bar)
+///   (import qualified Foo.Bar)
+///   (import qualified Foo.Bar as A.B)
+///   (import Foo.Bar exposing baz (a as b))
+///   (import Foo.Bar hiding z)
+///
+/// This is mostly like what haskell does and it's pretty expressive.
 pub fn compile_nsref(loc: Srcloc, internal: &[SExp]) -> Result<HelperForm, CompileErr> {
     if internal.len() < 2 {
         return Err(CompileErr(
@@ -750,7 +779,9 @@ pub fn compile_nsref(loc: Srcloc, internal: &[SExp]) -> Result<HelperForm, Compi
         ));
     }
 
+    // Compile a module import spec from the tail of the import.
     let import_spec = ModuleImportSpec::parse(loc.clone(), internal, 1)?;
+    // Qualfiied forms are simpler so we short circuit here.
     if let ModuleImportSpec::Qualified(q) = &import_spec {
         return Ok(HelperForm::Defnsref(Box::new(NamespaceRefData {
             loc,
@@ -762,6 +793,7 @@ pub fn compile_nsref(loc: Srcloc, internal: &[SExp]) -> Result<HelperForm, Compi
         })));
     }
 
+    // Not qualified path, so we haven't validated the name yet.
     let (_, parsed) = if let SExp::Atom(_nl, name) = &internal[1] {
         ImportLongName::parse(name)
     } else {
