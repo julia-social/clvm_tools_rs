@@ -13,6 +13,11 @@ use crate::compiler::comptypes::{
 use crate::compiler::rename::rename_args_helperform;
 use crate::compiler::sexp::{decode_string, SExp};
 
+/// Ensure that we know the full set of local names referenced by a lambda so we know that they
+/// aren't external references.
+///
+/// This just captures atoms in the argument set.  Captured or internal both count as 'local'
+/// here for module resolution purposes.
 fn capture_scope(in_scope: &mut HashSet<Vec<u8>>, args: Rc<SExp>) {
     match args.borrow() {
         SExp::Cons(_, a, b) => {
@@ -31,6 +36,7 @@ fn capture_scope(in_scope: &mut HashSet<Vec<u8>>, args: Rc<SExp>) {
     }
 }
 
+/// A structure that represents our tour through a single namespace during TourNamespaces.
 struct FindNamespaceLookingAtHelpers<'a> {
     hlist: &'a [HelperForm],
     namespace: Option<&'a ImportLongName>,
@@ -96,6 +102,9 @@ impl<'a> Iterator for TourNamespaces<'a> {
 }
 
 /// Given a helper, rewrite its name to reflect the original source.
+///
+/// This changes the name of the helper to be fully qualified so that fully qualified references
+/// rewritten in other helpers will match when the full program is assembled.
 fn namespace_helper(name: &ImportLongName, value: &HelperForm) -> HelperForm {
     match value {
         HelperForm::Defun(inline, dd) => HelperForm::Defun(
@@ -129,6 +138,12 @@ pub fn tour_helpers(helpers: &[HelperForm]) -> TourNamespaces<'_> {
     }
 }
 
+/// Given a match name and a name to test against, tell whether the name matches the target rename
+/// offered by the import ... exposing directive that contained it.
+///
+/// Example:
+///   (import Foo exposing (bar as baz)), examining (bar as baz) matches baz and not bar.
+///   (import Foo exposing bar), examining bar matches bar.
 fn exposed_name_matches(exposed: &ModuleImportListedName, orig_name: &[u8]) -> bool {
     if let Some(alias) = exposed.alias.as_ref() {
         orig_name == alias
@@ -139,6 +154,11 @@ fn exposed_name_matches(exposed: &ModuleImportListedName, orig_name: &[u8]) -> b
 
 /// Macros are renamed during preprocessing, so determine whether the name given is the rename
 /// of a macro.
+///
+/// Macros are moved away from typical names during preprocessing to ensure they don't conflict
+/// with anything in the output program when it's produced.  Each macro has access to all functions
+/// in the current module and all namespaces referred to by an import that appears lexically earlier
+/// in the module.
 fn is_macro_name(name: &ImportLongName) -> bool {
     if name.components.is_empty() {
         return false;
@@ -149,6 +169,8 @@ fn is_macro_name(name: &ImportLongName) -> bool {
 
 /// Main function which resolves a given short name to a helper retrieved from somewhere in the
 /// namespace tree, given the import directives that are active in the current namespace.
+///
+/// The result is the helper's fully qualified name and the matching helper.
 fn find_helper_target(
     opts: Rc<dyn CompilerOpts>,
     helpers: &[HelperForm],
@@ -201,6 +223,9 @@ fn find_helper_target(
     }) {
         match &ns_spec.specification {
             ModuleImportSpec::Qualified(q) => {
+                // We already know that qualified imports are external references, the only question
+                // is what namespace they refer to.  We unwind it here for positive resolution later
+                // on.
                 if let Some(t) = &q.target {
                     // Qualified as [t.name] only matches when we look use the 'as' qualifier.
                     if Some(&t.name) == parent.as_ref() {
@@ -232,6 +257,8 @@ fn find_helper_target(
                 }
             }
             ModuleImportSpec::Exposing(_, x) => {
+                // We don't process short named imports directly at the namespace level, instead
+                // resolving imports when a newly imported helper needs resolution.
                 if parent.is_some() {
                     continue;
                 }
@@ -261,6 +288,8 @@ fn find_helper_target(
                 }
             }
             ModuleImportSpec::Hiding(_, h) => {
+                // We don't process short named imports directly at the namespace level, instead
+                // resolving imports when a newly imported helper needs resolution.
                 if parent.is_some() {
                     continue;
                 }
@@ -298,10 +327,13 @@ fn display_namespace(parent_ns: Option<&ImportLongName>) -> String {
     }
 }
 
+/// Applyable function-like operators provided by the compiler.
 fn is_compiler_builtin(name: &[u8]) -> bool {
     name == b"com" || name == b"@"
 }
 
+/// Find and record binding names in let and assign forms in order to ensure we don't try to match
+/// them to external references.
 fn add_binding_names(bindings: &mut HashSet<Vec<u8>>, pattern: &BindingPattern) {
     match pattern {
         BindingPattern::Name(n) => {
@@ -320,7 +352,10 @@ fn add_binding_names(bindings: &mut HashSet<Vec<u8>>, pattern: &BindingPattern) 
     }
 }
 
-/// Given an expression, fully resolve needed helpers from namespaces if needed.
+/// Given an expression, fully resolve needed helpers from the available namespaces.  The output
+/// is a rewritten expression that calls each referenced helper by its fully qualified name.
+/// resolved_helpers is left containing the set imports which are used by the expression, indexed
+/// by their fully qualified names.
 fn resolve_namespaces_in_expr(
     resolved_helpers: &mut BTreeMap<ImportLongName, HelperForm>,
     opts: Rc<dyn CompilerOpts>,
@@ -557,6 +592,11 @@ fn resolve_namespaces_in_expr(
 }
 
 /// Given a helper, fully resolve needed imported helpers from other namespaces.
+/// One step up from resolve_namespaces_in_expr, perform the same task for a whole helper, yielding
+/// a version of the helper that refers to everything it depends on by fully qualified name.
+///
+/// resolved_helpers is left containing anything this helper depends on, indexed by fully qualified
+/// name.
 fn resolve_namespaces_in_helper(
     resolved_helpers: &mut BTreeMap<ImportLongName, HelperForm>,
     opts: Rc<dyn CompilerOpts>,
@@ -628,6 +668,28 @@ fn resolve_namespaces_in_helper(
 
 /// Given a program containing namespaces and namespace references, rewrite it so that any impoted
 /// helpers from outside namespaces have fully qualified names and include them in the program.
+///
+/// In practice this takes an input that looks like:
+///
+/// (mod (A)
+///   (namespace N (import M exposing C) (defun F (X) (+ X C)))
+///
+///   (namespace M (defconst C 1))
+///
+///   (import qualified N as Z.Y.X)
+///
+///   (Z.Y.X.F A)
+/// )
+///
+/// And transforms it into
+///
+/// (mod (A)
+///   (defconst M.C 1)
+///
+///   (defun N.F (X) (+ X M.C))
+///
+///   (N.F A)
+/// )
 pub fn resolve_namespaces(
     opts: Rc<dyn CompilerOpts>,
     program: &CompileForm,
