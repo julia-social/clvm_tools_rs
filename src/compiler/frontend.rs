@@ -6,8 +6,9 @@ use std::rc::Rc;
 use crate::classic::clvm::__type_compatibility__::bi_one;
 use crate::compiler::comptypes::{
     list_to_cons, ArgsAndTail, Binding, BindingPattern, BodyForm, CompileErr, CompileForm,
-    CompilerOpts, ConstantKind, DefconstData, DefmacData, DefunData, HelperForm, IncludeDesc,
-    LetData, LetFormInlineHint, LetFormKind, ModAccum,
+    CompilerOpts, ConstantKind, DefconstData, DefmacData, DefunData, HelperForm, ImportLongName,
+    IncludeDesc, LetData, LetFormInlineHint, LetFormKind, LongNameTranslation, ModAccum,
+    ModuleImportSpec, NamespaceData, NamespaceRefData,
 };
 use crate::compiler::lambda::handle_lambda;
 use crate::compiler::preprocessor::preprocess;
@@ -89,6 +90,8 @@ fn collect_used_names_helperform(body: &HelperForm) -> Vec<Vec<u8>> {
             res
         }
         HelperForm::Defun(_, defun) => collect_used_names_bodyform(&defun.body),
+        HelperForm::Defnamespace(_ns) => Vec::new(),
+        HelperForm::Defnsref(_ns) => Vec::new(),
     }
 }
 
@@ -631,6 +634,7 @@ fn compile_defmacro(
     })
 }
 
+#[derive(Debug)]
 struct OpName4Match {
     opl: Srcloc,
     op_name: Vec<u8>,
@@ -638,6 +642,7 @@ struct OpName4Match {
     name: Vec<u8>,
     args: Rc<SExp>,
     body: Rc<SExp>,
+    orig: Vec<SExp>,
 }
 
 #[allow(clippy::type_complexity)]
@@ -646,7 +651,11 @@ fn match_op_name_4(pl: &[SExp]) -> Option<OpName4Match> {
         return None;
     }
 
-    match &pl[0] {
+    // Atomize ensures that the result is presented as an atom if possible.  This makes the parser
+    // a bit more forgiving when we're examining code that has round-tripped through traditional
+    // clvm, which happens when modern tools such as use check are used on classic programs.
+    // The modern frontend requires atom representation in positions 0 and 1 of helpers anyway.
+    match &pl[0].atomize() {
         SExp::Atom(l, op_name) => {
             if pl.len() < 3 {
                 return Some(OpName4Match {
@@ -656,13 +665,15 @@ fn match_op_name_4(pl: &[SExp]) -> Option<OpName4Match> {
                     name: Vec::new(),
                     args: Rc::new(SExp::Nil(l.clone())),
                     body: Rc::new(SExp::Nil(l.clone())),
+                    orig: pl.to_owned(),
                 });
             }
 
-            match &pl[1] {
+            match &pl[1].atomize() {
                 SExp::Atom(ll, name) => {
+                    let tail_idx = 3;
                     let mut tail_list = Vec::new();
-                    for elt in pl.iter().skip(3) {
+                    for elt in pl.iter().skip(tail_idx) {
                         tail_list.push(Rc::new(elt.clone()));
                     }
                     Some(OpName4Match {
@@ -672,6 +683,7 @@ fn match_op_name_4(pl: &[SExp]) -> Option<OpName4Match> {
                         name: name.clone(),
                         args: Rc::new(pl[2].clone()),
                         body: Rc::new(enlist(l.clone(), &tail_list)),
+                        orig: pl.to_owned(),
                     })
                 }
                 _ => Some(OpName4Match {
@@ -681,11 +693,124 @@ fn match_op_name_4(pl: &[SExp]) -> Option<OpName4Match> {
                     name: Vec::new(),
                     args: Rc::new(SExp::Nil(l.clone())),
                     body: Rc::new(SExp::Nil(l.clone())),
+                    orig: pl.to_owned(),
                 }),
             }
         }
         _ => None,
     }
+}
+
+/// Produce a helperform from a namespace.  This acts as a storage container for helpers that
+/// can later be resolved via module resolution.
+///
+/// Nobody will write this, but it is parsed and transits this representation:
+///
+/// (namespace Foo.Bar
+///    (defconst C 99)
+///    (defun F (X) ...)
+/// )
+///
+/// These are used at compile time as helper buckets which can be drawn from to reseolve
+/// external dependencies a lot like how object files are used during linking of native code.
+///
+/// Module style constructs a program that contains namespaces and then resolves them to
+/// construct a non-namespaced program where all helpers have fully qualified names.
+pub fn compile_namespace(
+    opts: Rc<dyn CompilerOpts>,
+    loc: Srcloc,
+    internal: &[SExp],
+) -> Result<HelperForm, CompileErr> {
+    // A namespace needs a keyword and a name.
+    if internal.len() < 2 {
+        return Err(CompileErr(loc, "Namespace must have a name".to_string()));
+    }
+
+    // Its name should parse as a qualified name, even if it has only one component.
+    let (_, parsed) = if let SExp::Atom(_, name) = &internal[1] {
+        ImportLongName::parse(name)
+    } else {
+        return Err(CompileErr(
+            internal[1].loc(),
+            "Namespace name must be an atom".to_string(),
+        ));
+    };
+
+    let mut helpers = Vec::new();
+    // Parse all helpers.
+    for sexp in internal.iter().skip(2) {
+        if let Some(h) = compile_helperform(opts.clone(), Rc::new(sexp.clone()))? {
+            helpers.push(h.clone());
+        } else {
+            return Err(CompileErr(
+                sexp.loc(),
+                "Namespaces must contain only definitions".to_string(),
+            ));
+        }
+    }
+
+    Ok(HelperForm::Defnamespace(Box::new(NamespaceData {
+        loc: loc.clone(),
+        kw: internal[0].loc(),
+        nl: internal[1].loc(),
+        rendered_name: parsed.as_u8_vec(LongNameTranslation::Namespace),
+        longname: parsed,
+        helpers,
+    })))
+}
+
+/// Add a namespace reference from an input form.  These specify namespaces to use when adding
+/// helper forms.  A namespaced program is rewritten so that every helper has a fully resolved
+/// name.
+///
+/// An nsref is in one of these forms:
+///   (import Foo.Bar)
+///   (import qualified Foo.Bar)
+///   (import qualified Foo.Bar as A.B)
+///   (import Foo.Bar exposing baz (a as b))
+///   (import Foo.Bar hiding z)
+///
+/// This is mostly like what haskell does and it's pretty expressive.
+pub fn compile_nsref(loc: Srcloc, internal: &[SExp]) -> Result<HelperForm, CompileErr> {
+    if internal.len() < 2 {
+        return Err(CompileErr(
+            loc.clone(),
+            "import must import a module".to_string(),
+        ));
+    }
+
+    // Compile a module import spec from the tail of the import.
+    let import_spec = ModuleImportSpec::parse(loc.clone(), internal, 1)?;
+    // Qualfiied forms are simpler so we short circuit here.
+    if let ModuleImportSpec::Qualified(q) = &import_spec {
+        return Ok(HelperForm::Defnsref(Box::new(NamespaceRefData {
+            loc,
+            kw: internal[0].loc(),
+            nl: q.nl.clone(),
+            rendered_name: q.name.as_u8_vec(LongNameTranslation::Namespace),
+            longname: q.name.clone(),
+            specification: import_spec.clone(),
+        })));
+    }
+
+    // Not qualified path, so we haven't validated the name yet.
+    let (_, parsed) = if let SExp::Atom(_nl, name) = &internal[1] {
+        ImportLongName::parse(name)
+    } else {
+        return Err(CompileErr(
+            internal[1].loc(),
+            "Import name must be an atom".to_string(),
+        ));
+    };
+
+    Ok(HelperForm::Defnsref(Box::new(NamespaceRefData {
+        loc,
+        kw: internal[0].loc(),
+        nl: internal[1].loc(),
+        rendered_name: parsed.as_u8_vec(LongNameTranslation::Namespace),
+        longname: parsed,
+        specification: import_spec,
+    })))
 }
 
 pub fn compile_helperform(
@@ -754,6 +879,12 @@ pub fn compile_helperform(
                 },
             )
             .map(Some)
+        } else if matched.op_name == "namespace".as_bytes().to_vec() {
+            let ns = compile_namespace(opts, body.loc(), &matched.orig)?;
+            Ok(Some(ns))
+        } else if matched.op_name == "import".as_bytes().to_vec() {
+            let nsref = compile_nsref(body.loc(), &matched.orig)?;
+            Ok(Some(nsref))
         } else {
             Err(CompileErr(
                 matched.body.loc(),
@@ -881,6 +1012,10 @@ fn frontend_start(
     }
 }
 
+fn is_namespace_decl(h: &HelperForm) -> bool {
+    matches!(h, HelperForm::Defnamespace(_) | HelperForm::Defnsref(_))
+}
+
 /// Given the available helper list and the main expression, compute the list of
 /// reachable helpers.
 pub fn compute_live_helpers(
@@ -903,7 +1038,9 @@ pub fn compute_live_helpers(
 
     helper_list
         .iter()
-        .filter(|h| !opts.frontend_check_live() || helper_names.contains(h.name()))
+        .filter(|h| {
+            !opts.frontend_check_live() || is_namespace_decl(h) || helper_names.contains(h.name())
+        })
         .cloned()
         .collect()
 }
@@ -961,7 +1098,7 @@ pub fn frontend(
 
     let mut live_helpers = Vec::new();
     for h in our_mod.helpers {
-        if !opts.frontend_check_live() || helper_names.contains(h.name()) {
+        if !opts.frontend_check_live() || is_namespace_decl(&h) || helper_names.contains(h.name()) {
             live_helpers.push(h);
         }
     }

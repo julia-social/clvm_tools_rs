@@ -14,6 +14,7 @@ mod fuzz_assign;
 mod optimizer;
 mod preprocessor;
 mod repl;
+mod resolve;
 mod restargs;
 mod runtypes;
 mod singleton;
