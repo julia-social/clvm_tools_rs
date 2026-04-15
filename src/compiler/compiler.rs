@@ -88,6 +88,10 @@ lazy_static! {
     };
 }
 
+/// A basic implementation of CompilerOpts.  You can use these objects to build and
+/// configure the compilation process or use various wrappers.  To override only some
+/// methods of this object, you can wrap this object and implement whatever is wanted
+/// from HasCompilerOptsDelegation.
 #[derive(Clone, Debug)]
 pub struct DefaultCompilerOpts {
     pub include_dirs: Vec<String>,
@@ -115,6 +119,9 @@ pub fn create_prim_map() -> Rc<HashMap<Vec<u8>, Rc<SExp>>> {
     Rc::new(prim_map)
 }
 
+/// Desugar a CompileForm and produce a compatible CompileForm with sugar features removed.
+/// This results in a program that uses fewer language facilities and is therefore easier to
+/// translate on its own.
 pub fn do_desugar(program: &CompileForm) -> Result<CompileForm, CompileErr> {
     // Transform let bindings, merging nested let scopes with the top namespace
     let hoisted_bindings = hoist_body_let_binding(None, program.args.clone(), program.exp.clone())?;
@@ -133,6 +140,8 @@ pub fn do_desugar(program: &CompileForm) -> Result<CompileForm, CompileErr> {
     })
 }
 
+/// Given a compileform, compile it to clvm.  This comes after preprocessing
+/// and desugaring.
 pub fn finish_compilation(
     context: &mut BasicCompileContext,
     opts: Rc<dyn CompilerOpts>,
@@ -329,7 +338,14 @@ pub fn compile_module(
 ) -> Result<CompileModuleOutput, CompileErr> {
     let loc = program.loc();
     let mut dialect = opts.dialect();
+    // Module style is new, so there will never be a time when we don't want every
+    // bug fix that existed before it was released.
     dialect.int_fix = true;
+    if let Some(stepping) = dialect.stepping {
+        if stepping < 26 {
+            dialect.stepping = Some(26);
+        }
+    }
     opts = opts.set_optimize(true).set_dialect(dialect);
 
     if exports.is_empty() {
@@ -717,6 +733,7 @@ fn add_inline_hash_for_constant(program: &mut CompileForm, loc: &Srcloc, fun_nam
     ));
 }
 
+/// Given a set of untreated input forms, compile it as a clvm program.
 pub fn compile_pre_forms(
     context: &mut BasicCompileContext,
     opts: Rc<dyn CompilerOpts>,
@@ -779,6 +796,13 @@ pub fn compile_pre_forms(
     }
 }
 
+/// Given a file name and content, compile it as a clvm program.  It receives a
+/// clvm runner object, opts, which describes all the variations of compilation
+/// that are possible and a symbol table result which associates hashes with
+/// names and source locations.  It also contains descriptions of the arguments
+/// and whether each function described accepts a left environment, which affects
+/// how debuggers associate the argument structures with values in the
+/// environment when functions are applied.
 pub fn compile_file(
     allocator: &mut Allocator,
     runner: Rc<dyn TRunProgram>,
@@ -1097,7 +1121,7 @@ fn cons(f: Rc<SExp>, r: Rc<SExp>) -> Rc<SExp> {
     op2(4, f, r)
 }
 
-// compose (a (a path env) (c env 1))
+/// compose (a (a path env) (c env 1))
 pub fn rewrite_in_program(path: Number, env: Rc<SExp>) -> Rc<SExp> {
     apply(
         apply(
@@ -1109,6 +1133,7 @@ pub fn rewrite_in_program(path: Number, env: Rc<SExp>) -> Rc<SExp> {
     )
 }
 
+/// Tell whether the given atom matches the given operator.
 pub fn is_operator(op: u32, atom: &SExp) -> bool {
     match atom.to_bigint() {
         Some(n) => n == op.to_bigint().unwrap(),
@@ -1126,9 +1151,9 @@ pub fn is_cons(atom: &SExp) -> bool {
     is_operator(4, atom)
 }
 
-// Extracts the environment from a clvm program that contains one.
-// The usual form of a program to analyze is:
-// (2 main (4 env 1))
+/// Extracts the environment from a clvm program that contains one.
+/// The usual form of a program to analyze is:
+/// (2 main (4 env 1))
 pub fn extract_program_and_env(program: Rc<SExp>) -> Option<(Rc<SExp>, Rc<SExp>)> {
     // Most programs have apply as a toplevel form.  If we don't then it's
     // a form we don't understand.
@@ -1153,6 +1178,9 @@ pub fn extract_program_and_env(program: Rc<SExp>) -> Option<(Rc<SExp>, Rc<SExp>)
     }
 }
 
+/// Determine whether the indicated argument structure includes an at-capture.  This is
+/// a utility used by many things in the course of reading argument trees to ensure
+/// that at captures are recognized.
 pub fn is_at_capture(head: Rc<SExp>, rest: Rc<SExp>) -> Option<(Vec<u8>, Rc<SExp>)> {
     rest.proper_list().and_then(|l| {
         if l.len() != 2 {
