@@ -24,7 +24,7 @@ fn do_program_module_resolution(
 ) -> Result<CompileForm, CompileErr> {
     let parsed = parse_sexp(loc.clone(), test_program.bytes())?;
     let processed = frontend(opts.clone(), &parsed)?;
-    resolve_namespaces(opts.clone(), &processed)
+    resolve_namespaces(opts.clone(), &processed.compileform())
 }
 
 fn resolve_modules(test_program: &str) -> Result<CompileForm, CompileErr> {

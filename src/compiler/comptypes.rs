@@ -294,6 +294,7 @@ pub struct ImportLongName {
 /// namespace style.  When module style is added subsequently, Filename(_) will appear.
 pub enum LongNameTranslation {
     Namespace,
+    Filename(String),
 }
 
 impl ImportLongName {
@@ -314,14 +315,21 @@ impl ImportLongName {
     }
 
     /// Render to a string of readable bytes.
-    pub fn as_u8_vec(&self, _filename: LongNameTranslation) -> Vec<u8> {
+    pub fn as_u8_vec(&self, filename: LongNameTranslation) -> Vec<u8> {
         let mut result_vec = vec![];
-        let sep = b'.';
+        let sep = if matches!(filename, LongNameTranslation::Filename(_)) {
+            b'/'
+        } else {
+            b'.'
+        };
         for (i, c) in self.components.iter().enumerate() {
             if i != 0 {
                 result_vec.push(sep);
             }
             result_vec.extend(c.clone());
+        }
+        if let LongNameTranslation::Filename(ext) = &filename {
+            result_vec.extend(ext.as_bytes().to_vec());
         }
         result_vec
     }
@@ -370,6 +378,13 @@ impl ImportLongName {
         }
 
         (None, self.components[0].clone())
+    }
+
+    /// Joins the components of the target name to this name.
+    pub fn combine(&self, with: &ImportLongName) -> Self {
+        let mut result = self.components.clone();
+        result.extend(with.components.clone());
+        ImportLongName { components: result }
     }
 }
 
@@ -813,6 +828,10 @@ pub enum IncludeProcessType {
     Hex,
     /// Read clvm in s-expression form as a clvm value.
     SExpression,
+    /// Compile a full program and return its representation.
+    Compiled,
+    /// Import as a module.
+    Module(Box<ModuleImportSpec>),
 }
 
 /// A description of an include form.  Here, records the locations of the various
@@ -826,16 +845,26 @@ pub struct IncludeDesc {
     pub nl: Srcloc,
     /// The relative path to a target or a special directive name.
     pub name: Vec<u8>,
+    /// Kind of inclusion.  Determines whether dependencies are recursed and
+    /// what operation is performed on the retrieved clvm form.
     pub kind: Option<IncludeProcessType>,
 }
 
 impl IncludeDesc {
     pub fn to_sexp(&self) -> Rc<SExp> {
-        Rc::new(SExp::Cons(
-            self.kw.clone(),
-            Rc::new(SExp::Atom(self.kw.clone(), b"include".to_vec())),
-            Rc::new(SExp::QuotedString(self.nl.clone(), b'"', self.name.clone())),
-        ))
+        if let Some(IncludeProcessType::Module(_spec)) = &self.kind {
+            Rc::new(SExp::Cons(
+                self.kw.clone(),
+                Rc::new(SExp::Atom(self.kw.clone(), b"module".to_vec())),
+                Rc::new(SExp::QuotedString(self.nl.clone(), b'"', self.name.clone())),
+            ))
+        } else {
+            Rc::new(SExp::Cons(
+                self.kw.clone(),
+                Rc::new(SExp::Atom(self.kw.clone(), b"include".to_vec())),
+                Rc::new(SExp::QuotedString(self.nl.clone(), b'"', self.name.clone())),
+            ))
+        }
     }
 }
 
@@ -930,6 +959,8 @@ pub trait CompilerOpts {
     /// open ended for various purposes, such as diagnostics.
     fn diag_flags(&self) -> Rc<HashSet<usize>>;
 
+    /// Set main file, creating an opts that treats this file as its main file.
+    fn set_filename(&self, new_file: &str) -> Rc<dyn CompilerOpts>;
     /// Set the dialect.
     fn set_dialect(&self, dialect: AcceptedDialect) -> Rc<dyn CompilerOpts>;
     /// Set search paths.
@@ -964,13 +995,16 @@ pub trait CompilerOpts {
         filename: String,
     ) -> Result<(String, Vec<u8>), CompileErr>;
 
+    fn write_new_file(&self, target: &str, content: &[u8]) -> Result<(), CompileErr>;
+    fn get_file_mod_date(&self, loc: &Srcloc, filename: &str) -> Result<u64, CompileErr>;
+
     /// Given a parsed SExp, compile it as an independent program based on the
     /// settings given here.  The result is bare generated code.
     fn compile_program(
         &self,
         context: &mut BasicCompileContext,
         sexp: Rc<SExp>,
-    ) -> Result<SExp, CompileErr>;
+    ) -> Result<CompilerOutput, CompileErr>;
 }
 
 /// A trait that simplifies implementing one's own CompilerOpts personality.
@@ -1062,6 +1096,9 @@ pub trait HasCompilerOptsDelegation {
     fn override_set_diag_flags(&self, flags: Rc<HashSet<usize>>) -> Rc<dyn CompilerOpts> {
         self.update_compiler_opts(|o| o.set_diag_flags(flags))
     }
+    fn override_set_filename(&self, filename: &str) -> Rc<dyn CompilerOpts> {
+        self.update_compiler_opts(|o| o.set_filename(filename))
+    }
     fn override_set_prim_map(
         &self,
         new_map: Rc<HashMap<Vec<u8>, Rc<SExp>>>,
@@ -1075,11 +1112,17 @@ pub trait HasCompilerOptsDelegation {
     ) -> Result<(String, Vec<u8>), CompileErr> {
         self.compiler_opts().read_new_file(inc_from, filename)
     }
+    fn override_write_new_file(&self, target: &str, content: &[u8]) -> Result<(), CompileErr> {
+        self.compiler_opts().write_new_file(target, content)
+    }
+    fn override_get_file_mod_date(&self, loc: &Srcloc, filename: &str) -> Result<u64, CompileErr> {
+        self.compiler_opts().get_file_mod_date(loc, filename)
+    }
     fn override_compile_program(
         &self,
         context: &mut BasicCompileContext,
         sexp: Rc<SExp>,
-    ) -> Result<SExp, CompileErr> {
+    ) -> Result<CompilerOutput, CompileErr> {
         self.compiler_opts().compile_program(context, sexp)
     }
 }
@@ -1162,6 +1205,9 @@ impl<T: HasCompilerOptsDelegation> CompilerOpts for T {
     fn set_diag_flags(&self, new_flags: Rc<HashSet<usize>>) -> Rc<dyn CompilerOpts> {
         self.override_set_diag_flags(new_flags)
     }
+    fn set_filename(&self, filename: &str) -> Rc<dyn CompilerOpts> {
+        self.override_set_filename(filename)
+    }
     fn read_new_file(
         &self,
         inc_from: String,
@@ -1169,17 +1215,23 @@ impl<T: HasCompilerOptsDelegation> CompilerOpts for T {
     ) -> Result<(String, Vec<u8>), CompileErr> {
         self.override_read_new_file(inc_from, filename)
     }
+    fn write_new_file(&self, target: &str, content: &[u8]) -> Result<(), CompileErr> {
+        self.override_write_new_file(target, content)
+    }
+    fn get_file_mod_date(&self, loc: &Srcloc, filename: &str) -> Result<u64, CompileErr> {
+        self.override_get_file_mod_date(loc, filename)
+    }
     fn compile_program(
         &self,
         context: &mut BasicCompileContext,
         sexp: Rc<SExp>,
-    ) -> Result<SExp, CompileErr> {
+    ) -> Result<CompilerOutput, CompileErr> {
         self.override_compile_program(context, sexp)
     }
 }
 
 /// Frontend uses this to accumulate frontend forms, used internally.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ModAccum {
     pub loc: Srcloc,
     pub includes: Vec<IncludeDesc>,
@@ -1388,24 +1440,21 @@ impl HelperForm {
     /// be re-parsed if needed.
     pub fn to_sexp(&self) -> Rc<SExp> {
         match self {
-            HelperForm::Defconstant(defc) => match defc.kind {
-                ConstantKind::Simple => Rc::new(list_to_cons(
+            HelperForm::Defconstant(defc) => {
+                let dc_kw = match defc.kind {
+                    ConstantKind::Simple => "defconstant",
+                    _ => "defconst",
+                };
+
+                Rc::new(list_to_cons(
                     defc.loc.clone(),
                     &[
-                        Rc::new(SExp::atom_from_string(defc.loc.clone(), "defconstant")),
+                        Rc::new(SExp::atom_from_string(defc.loc.clone(), dc_kw)),
                         Rc::new(SExp::atom_from_vec(defc.loc.clone(), &defc.name)),
                         defc.body.to_sexp(),
                     ],
-                )),
-                ConstantKind::Complex => Rc::new(list_to_cons(
-                    defc.loc.clone(),
-                    &[
-                        Rc::new(SExp::atom_from_string(defc.loc.clone(), "defconst")),
-                        Rc::new(SExp::atom_from_vec(defc.loc.clone(), &defc.name)),
-                        defc.body.to_sexp(),
-                    ],
-                )),
-            },
+                ))
+            }
             HelperForm::Defmacro(mac) => generate_defmacro_sexp(mac),
             HelperForm::Defun(inline, defun) => {
                 let di_string = "defun-inline".to_string();
@@ -1690,9 +1739,57 @@ pub fn with_heading(l: Srcloc, name: &str, body: Rc<SExp>) -> SExp {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct CompileModuleComponent {
+    pub shortname: Vec<u8>,
+    pub filename: String,
+    pub content: Rc<SExp>,
+    pub hash: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CompileModuleOutput {
+    pub summary: Rc<SExp>,
+    pub includes: Vec<IncludeDesc>,
+    pub components: Vec<CompileModuleComponent>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub enum CompilerOutput {
+    Program(Vec<IncludeDesc>, SExp),
+    Module(CompileModuleOutput),
+}
+
+impl CompilerOutput {
+    pub fn to_sexp(&self) -> SExp {
+        match self {
+            CompilerOutput::Program(_, x) => x.clone(),
+            CompilerOutput::Module(x) => {
+                let borrowed: &SExp = x.summary.borrow();
+                borrowed.clone()
+            }
+        }
+    }
+
+    pub fn loc(&self) -> Srcloc {
+        match self {
+            CompilerOutput::Program(_, x) => x.loc(),
+            CompilerOutput::Module(x) => x.summary.loc(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct NameAndLoc {
     pub value: Vec<u8>,
     pub loc: Option<Srcloc>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ExportProgramDesc {
+    pub loc: Srcloc,
+    pub kw_loc: Option<Srcloc>,
+    pub args: Rc<SExp>,
+    pub expr: Rc<BodyForm>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1702,6 +1799,49 @@ pub struct ExportFunctionDesc {
     pub name: NameAndLoc,
     pub as_loc: Option<Srcloc>,
     pub as_name: Option<NameAndLoc>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub enum Export {
+    MainProgram(ExportProgramDesc),
+    Function(Box<ExportFunctionDesc>),
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub enum FrontendOutput {
+    CompileForm(CompileForm),
+    Module(CompileForm, Vec<Export>),
+}
+
+impl FrontendOutput {
+    pub fn compileform(&self) -> &CompileForm {
+        match self {
+            FrontendOutput::CompileForm(cf) => cf,
+            FrontendOutput::Module(cf, _) => cf,
+        }
+    }
+
+    pub fn replace_helpers(&self, new_helpers: &[HelperForm]) -> Self {
+        match self {
+            FrontendOutput::CompileForm(cf) => {
+                FrontendOutput::CompileForm(cf.replace_helpers(new_helpers))
+            }
+            FrontendOutput::Module(cf, exports) => {
+                FrontendOutput::Module(cf.replace_helpers(new_helpers), exports.clone())
+            }
+        }
+    }
+
+    pub fn remove_helpers(&self, to_remove: &HashSet<Vec<u8>>) -> Self {
+        match self {
+            FrontendOutput::CompileForm(cf) => {
+                FrontendOutput::CompileForm(cf.remove_helpers(to_remove))
+            }
+            FrontendOutput::Module(cf, exports) => {
+                FrontendOutput::Module(cf.remove_helpers(to_remove), exports.clone())
+            }
+        }
+    }
 }
 
 pub fn cons_of_string_map<X>(

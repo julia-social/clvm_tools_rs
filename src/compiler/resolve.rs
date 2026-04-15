@@ -171,7 +171,7 @@ fn is_macro_name(name: &ImportLongName) -> bool {
 /// namespace tree, given the import directives that are active in the current namespace.
 ///
 /// The result is the helper's fully qualified name and the matching helper.
-fn find_helper_target(
+pub fn find_helper_target(
     opts: Rc<dyn CompilerOpts>,
     helpers: &[HelperForm],
     parent_ns: Option<&ImportLongName>,

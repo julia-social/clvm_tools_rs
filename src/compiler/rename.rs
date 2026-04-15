@@ -525,7 +525,7 @@ pub fn rename_args_compileform(c: &CompileForm) -> Result<CompileForm, CompileEr
     let local_renamed_arg = rename_in_cons(&local_namemap, c.args.clone(), true);
     let local_renamed_helpers: Vec<HelperForm> = map_m(&rename_args_helperform, &c.helpers)?;
     let local_renamed_body = rename_args_bodyform(c.exp.borrow())?;
-    Ok(CompileForm {
+    let renamed_cf = CompileForm {
         loc: c.loc(),
         args: local_renamed_arg,
         include_forms: c.include_forms.clone(),
@@ -537,5 +537,6 @@ pub fn rename_args_compileform(c: &CompileForm) -> Result<CompileForm, CompileEr
             &local_namemap,
             Rc::new(local_renamed_body),
         )?),
-    })
+    };
+    Ok(renamed_cf)
 }
