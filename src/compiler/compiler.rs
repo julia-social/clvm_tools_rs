@@ -317,7 +317,14 @@ pub fn compile_module(
 ) -> Result<CompileModuleOutput, CompileErr> {
     let loc = program.loc();
     let mut dialect = opts.dialect();
+    // Module style is new, so there will never be a time when we don't want every
+    // bug fix that existed before it was released.
     dialect.int_fix = true;
+    if let Some(stepping) = dialect.stepping {
+        if stepping < 26 {
+            dialect.stepping = Some(26);
+        }
+    }
     opts = opts.set_optimize(true).set_dialect(dialect);
 
     if exports.is_empty() {
