@@ -560,7 +560,7 @@ fn compute_export_summary(
             loc.clone(),
             Rc::new(SExp::Cons(
                 loc.clone(),
-                Rc::new(SExp::QuotedString(loc.clone(), b'"', shortname.to_vec())),
+                Rc::new(SExp::Atom(loc.clone(), shortname.to_vec())),
                 Rc::new(SExp::QuotedString(loc, b'x', hash)),
             )),
             list_tail,
@@ -646,7 +646,9 @@ fn add_main_fingerprint(cf: &mut CompileForm, forms: &[Rc<SExp>]) {
         nl: cf.loc(),
         name: b"main".to_vec(),
         kind: Some(IncludeProcessType::Compiled),
-        fingerprint: sha256tree(form_list),
+        fingerprint: sha256tree(form_list)
+            .try_into()
+            .expect("sha256tree returns 32 bytes"),
     });
 }
 
