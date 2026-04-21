@@ -43,6 +43,8 @@ pub mod comptypes;
 pub mod debug;
 /// Utilities for chialisp dialect choice
 pub mod dialect;
+/// An on-disk cache for compiled modules
+pub mod diskcache;
 /// Evaluate and partially evaluate chialisp expressions
 pub mod evaluate;
 /// Turn chialisp programs expressed as parsed clvm into data structures describing a chialisp program.
