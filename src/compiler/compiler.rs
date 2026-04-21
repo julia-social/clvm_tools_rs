@@ -560,7 +560,7 @@ fn compute_export_summary(
             loc.clone(),
             Rc::new(SExp::Cons(
                 loc.clone(),
-                Rc::new(SExp::QuotedString(loc.clone(), b'"', shortname.to_vec())),
+                Rc::new(SExp::Atom(loc.clone(), shortname.to_vec())),
                 Rc::new(SExp::QuotedString(loc, b'x', hash)),
             )),
             list_tail,
