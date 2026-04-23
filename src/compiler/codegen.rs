@@ -172,11 +172,11 @@ fn create_name_lookup_(
     name: &[u8],
     env: Rc<SExp>,
     find: Rc<SExp>,
-) -> Result<u64, CompileErr> {
+) -> Result<Number, CompileErr> {
     match find.borrow() {
         SExp::Atom(l, a) => {
             if *a == *name {
-                Ok(1_u64)
+                Ok(bi_one())
             } else {
                 Err(CompileErr(
                     l.clone(),
@@ -191,7 +191,7 @@ fn create_name_lookup_(
         SExp::Integer(l, i) => {
             let a = u8_from_number(i.clone());
             if a == *name {
-                Ok(1_u64)
+                Ok(bi_one())
             } else {
                 Err(CompileErr(
                     l.clone(),
@@ -206,15 +206,16 @@ fn create_name_lookup_(
         SExp::Cons(l, head, rest) => {
             if let Some((capture, substructure)) = is_at_capture(head.clone(), rest.clone()) {
                 if *capture == *name {
-                    Ok(1_u64)
+                    Ok(bi_one())
                 } else {
                     create_name_lookup_(l.clone(), name, env, substructure)
                 }
             } else {
                 create_name_lookup_(l.clone(), name, env.clone(), head.clone())
-                    .map(|v| Ok(2 * v))
+                    .map(|v| Ok(2_u32.to_bigint().unwrap() * v))
                     .unwrap_or_else(|_| {
-                        create_name_lookup_(l.clone(), name, env, rest.clone()).map(|v| 2 * v + 1)
+                        create_name_lookup_(l.clone(), name, env, rest.clone())
+                            .map(|v| 2_u32.to_bigint().unwrap() * v + bi_one())
                     })
             }
         }
@@ -305,11 +306,26 @@ fn lambda_for_defun(loc: Srcloc, lookup: Rc<SExp>) -> Rc<SExp> {
     )
 }
 
+// Earlier, the paths had been i64 in here (my early mistake).
+// This corrects it while preserving the way prior versions worked.  This is tested in
+// test_big_env_program_overflow_and_fix.
+fn early_stepping_truncate_to_u64(opts: Rc<dyn CompilerOpts>, n: Number) -> Number {
+    if let Some(stepping) = &opts.dialect().stepping {
+        if *stepping < 26 {
+            // Sign extend.
+            return n & 0xffffffffffffffff_u64.to_bigint().unwrap();
+        }
+    }
+
+    n
+}
+
 // Note that renaming has taken place before code generation, so there won't be any shadowing.
 // If a local shadowed a global binding before renaming, the local and all uses would have been
 // given a new, unique name via gensym.
 fn create_name_lookup(
     compiler: &PrimaryCodegen,
+    opts: Rc<dyn CompilerOpts>,
     l: Srcloc,
     name: &[u8],
     // If the lookup is in head position, then it is a lookup as a callable,
@@ -329,7 +345,7 @@ fn create_name_lookup(
                     let is_defun = is_defun_or_constant_in_codegen(compiler, name);
                     // Determine if it's a defun.  If so we can ensure that it's
                     // callable like a lambda by repeating the left env into it.
-                    let find_program = Rc::new(SExp::Integer(l.clone(), i.to_bigint().unwrap()));
+                    let find_program = Rc::new(SExp::Integer(l.clone(), early_stepping_truncate_to_u64(opts.clone(), i)));
                     if matches!(as_variable, NameLookupType::ReferenceAsVariable) && matches!(is_defun, Some(EnvDefinitionStatus::IsDefun)) {
                         // It's a defun.  Harden the result so it is callable
                         // directly by the CLVM 'a' operator.
@@ -375,7 +391,7 @@ fn call_head_is_atom(bf: &BodyForm) -> bool {
 }
 
 pub fn get_callable(
-    _opts: Rc<dyn CompilerOpts>,
+    opts: Rc<dyn CompilerOpts>,
     compiler: &PrimaryCodegen,
     l: Srcloc,
     atom: Rc<SExp>,
@@ -388,6 +404,7 @@ pub fn get_callable(
             // a variable.
             let defun = create_name_lookup(
                 compiler,
+                opts.clone(),
                 l.clone(),
                 name,
                 NameLookupType::SimpleEnvReference,
@@ -563,12 +580,14 @@ fn compute_parent_of_path(mut path: Number, mut steps: Number) -> Number {
 // referneced parent position is not a pair, it will not be present.
 fn produce_argument_check(
     compiler: &PrimaryCodegen,
+    opts: Rc<dyn CompilerOpts>,
     loc: Srcloc,
     a: &[u8],
     steps: Number,
 ) -> Result<CompiledCode, CompileErr> {
     if let SExp::Integer(l, lookup) = create_name_lookup(
         compiler,
+        opts.clone(),
         loc.clone(),
         a,
         NameLookupType::OnlyVariableBinding,
@@ -745,7 +764,7 @@ fn compile_call(
                         (
                             BodyForm::Value(SExp::Atom(_al, a)),
                             BodyForm::Quoted(SExp::Integer(_il, i)),
-                        ) => produce_argument_check(compiler, call.loc.clone(), a, i.clone()),
+                        ) => produce_argument_check(compiler, opts.clone(), call.loc.clone(), a, i.clone()),
                         (
                             BodyForm::Call(cl, c, _t),
                             BodyForm::Value(SExp::Integer(_i1, i)),
@@ -912,6 +931,7 @@ pub fn generate_expr_code(
                         // is returned, it should be a packaged callable.
                         create_name_lookup(
                             compiler,
+                            opts.clone(),
                             l.clone(),
                             atom,
                             NameLookupType::ReferenceAsVariable,
