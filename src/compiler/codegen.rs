@@ -413,8 +413,8 @@ fn early_stepping_truncate_to_u64(opts: Rc<dyn CompilerOpts>, n: Number) -> Numb
 // If a local shadowed a global binding before renaming, the local and all uses would have been
 // given a new, unique name via gensym.
 fn create_name_lookup(
-    opts: Rc<dyn CompilerOpts>,
     compiler: &PrimaryCodegen,
+    opts: Rc<dyn CompilerOpts>,
     l: Srcloc,
     name: &[u8],
     // If the lookup is in head position, then it is a lookup as a callable,
@@ -498,8 +498,8 @@ pub fn get_callable(
             // We're getting a callable, so the access requested is not as
             // a variable.
             let defun = create_name_lookup(
-                opts.clone(),
                 compiler,
+                opts.clone(),
                 l.clone(),
                 name,
                 NameLookupType::SimpleEnvReference,
@@ -681,8 +681,8 @@ fn produce_argument_check(
     steps: Number,
 ) -> Result<CompiledCode, CompileErr> {
     if let SExp::Integer(l, lookup) = create_name_lookup(
-        opts.clone(),
         compiler,
+        opts.clone(),
         loc.clone(),
         a,
         NameLookupType::OnlyVariableBinding,
@@ -1045,8 +1045,8 @@ pub fn generate_expr_code(
                         // a Value bodyform containing an Atom, so if a defun
                         // is returned, it should be a packaged callable.
                         create_name_lookup(
-                            opts.clone(),
                             compiler,
+                            opts.clone(),
                             l.clone(),
                             atom,
                             NameLookupType::ReferenceAsVariable,
