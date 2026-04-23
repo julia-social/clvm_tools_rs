@@ -9,6 +9,7 @@ mod cldb;
 mod clvm;
 mod codegen_funcache;
 mod compiler;
+mod module_cache;
 mod evaluate;
 mod fuzz;
 mod fuzz_assign;

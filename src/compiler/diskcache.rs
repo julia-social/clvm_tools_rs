@@ -60,3 +60,78 @@ pub fn set_cache_element(
 ) {
     set_cache_element_error(opts, cf, export_path, export_hex).ok();
 }
+
+/// Exposes the cache-key segment used under `.chialisp/<key>/` (tests and tooling only).
+#[cfg(test)]
+pub fn module_cache_key_hex(cf: &CompileForm) -> String {
+    cache_key(cf)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::compiler::comptypes::{BodyForm, CompileForm, IncludeDesc, IncludeProcessType};
+    use crate::compiler::sexp::SExp;
+    use crate::compiler::srcloc::Srcloc;
+
+    fn empty_compileform(loc: Srcloc) -> CompileForm {
+        CompileForm {
+            loc: loc.clone(),
+            include_forms: Vec::new(),
+            args: Rc::new(SExp::Nil(loc.clone())),
+            helpers: Vec::new(),
+            exp: Rc::new(BodyForm::Quoted(SExp::Nil(loc.clone()))),
+        }
+    }
+
+    #[test]
+    fn cache_key_stable_for_empty_includes() {
+        let loc = Srcloc::start(&"a.clsp".to_string());
+        let cf = empty_compileform(loc);
+        let k = cache_key(&cf);
+        assert_eq!(
+            k,
+            "4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a"
+        );
+    }
+
+    #[test]
+    fn cache_key_changes_with_concatenated_fingerprints() {
+        let loc = Srcloc::start(&"b.clsp".to_string());
+        let mut cf = empty_compileform(loc.clone());
+        let desc = |fp: Vec<u8>| IncludeDesc {
+            kw: loc.clone(),
+            nl: loc.clone(),
+            name: b"x".to_vec(),
+            kind: None,
+            fingerprint: fp,
+        };
+        cf.include_forms.push(desc(vec![1, 2, 3]));
+        let k1 = cache_key(&cf);
+        cf.include_forms.push(desc(vec![4, 5]));
+        let k2 = cache_key(&cf);
+        assert_ne!(k1, k2);
+        cf.include_forms.truncate(1);
+        let k1_again = cache_key(&cf);
+        assert_eq!(k1, k1_again);
+    }
+
+    #[test]
+    fn cache_key_main_fingerprint_style() {
+        let loc = Srcloc::start(&"c.clsp".to_string());
+        let mut cf = empty_compileform(loc.clone());
+        cf.include_forms.push(IncludeDesc {
+            kw: loc.clone(),
+            nl: loc.clone(),
+            name: b"main".to_vec(),
+            kind: Some(IncludeProcessType::Compiled),
+            fingerprint: vec![0xab, 0xcd],
+        });
+        let k = cache_key(&cf);
+        assert!(!k.is_empty());
+        assert_ne!(
+            k,
+            "4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a"
+        );
+    }
+}

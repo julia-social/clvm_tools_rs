@@ -109,7 +109,6 @@ fn transform_helper<F: Fn(&HelperForm) -> Option<HelperForm>>(
 ) {
     for h in compileform.helpers.iter_mut() {
         if let Some(res) = transform(&h) {
-            eprintln!("{} became {}", h.to_sexp(), res.to_sexp());
             *h = res;
         }
     }
@@ -191,8 +190,6 @@ fn test_codegen_function_cache() {
         None
     });
 
-    eprintln!("compileform {}", desugared.to_sexp());
-
     let dependency_graph = FunctionDependencyGraph::new_with_options(
         &desugared,
         DepgraphOptions {
@@ -209,12 +206,9 @@ fn test_codegen_function_cache() {
         )
         .unwrap(),
     );
-    eprintln!("generated code {base_generated}");
-
     let original_map = context.funcache.as_ref().unwrap().function_outputs.clone();
     let mut allocator = Allocator::new();
     let run_arg = parse_sexp(Srcloc::start("*args*"), b"(3 7)".iter().cloned()).unwrap()[0].clone();
-    eprintln!("use args {}", run_arg);
     let expected_outcome = get_expected_outcome(opts.clone(), run_arg.clone()).unwrap();
     let run_outcome_base = run(
         &mut allocator,
@@ -405,9 +399,50 @@ fn test_codegen_function_cache() {
     let diffcc_ff = extract_helper_gen(&generated_diff_c_map_clean, "FF").unwrap();
     let diffcc_gg = extract_helper_gen(&generated_diff_c_map_clean, "GG").unwrap();
     let diffcc_h = extract_helper_gen(&generated_diff_c_map_clean, "H").unwrap();
-    eprintln!("new H {diffcc_h}");
 
     assert_eq!(diffcc_ff, old_ff);
     assert_eq!(diffcc_gg, old_gg);
     assert_ne!(diffcc_h, old_h);
+}
+
+/// `Funcache` is only consulted when a `FunctionDependencyGraph` is passed into `codegen`.
+#[test]
+fn funcache_without_dependency_graph_does_not_store_entries() {
+    let opts: Rc<dyn CompilerOpts> = Rc::new(DefaultCompilerOpts::new("*fc-no-graph*")).set_dialect(
+        AcceptedDialect {
+            stepping: Some(25),
+            strict: true,
+            int_fix: true,
+            extra_numeric_constants: false,
+        },
+    );
+    let loc = Srcloc::start("*fc-no-graph*");
+    let parsed = parse_sexp(
+        loc.clone(),
+        "(mod (X) (defun F (Y) (+ Y 1)) (F X))".bytes(),
+    )
+    .expect("parse");
+    let FrontendOutput::CompileForm(cf) = frontend(opts.clone(), &parsed).expect("frontend")
+    else {
+        panic!("expected CompileForm");
+    };
+    let desugared = do_desugar(&cf).expect("desugar");
+    let runner = Rc::new(DefaultProgramRunner::new());
+    let mut context = BasicCompileContext::new(
+        Allocator::new(),
+        runner,
+        HashMap::new(),
+        Box::new(Strategy23 {}),
+    );
+    context.funcache = Some(Funcache::default());
+    codegen(&mut context, opts, None, &desugared).expect("codegen");
+    assert!(
+        context
+            .funcache
+            .as_ref()
+            .expect("funcache")
+            .function_outputs
+            .is_empty(),
+        "without a dependency graph, per-function cache keys are not computed"
+    );
 }
