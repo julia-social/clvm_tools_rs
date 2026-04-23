@@ -150,7 +150,7 @@ pub fn finish_compilation(
     let p3 = context.post_desugar_optimization(opts.clone(), p2)?;
 
     // generate code from AST, optionally with optimization
-    let generated = codegen(context, opts.clone(), &p3)?;
+    let generated = codegen(context, opts.clone(), None, &p3)?;
 
     let g2 = context.post_codegen_output_optimize(opts, generated)?;
 
