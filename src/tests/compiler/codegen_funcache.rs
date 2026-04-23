@@ -421,7 +421,7 @@ fn funcache_without_dependency_graph_does_not_store_entries() {
     let FrontendOutput::CompileForm(cf) = frontend(opts.clone(), &parsed).expect("frontend") else {
         panic!("expected CompileForm");
     };
-    let desugared = do_desugar(&cf).expect("desugar");
+    let desugared = do_desugar(opts.clone(), &cf).expect("desugar");
     let runner = Rc::new(DefaultProgramRunner::new());
     let mut context = BasicCompileContext::new(
         Allocator::new(),
