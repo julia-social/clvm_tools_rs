@@ -408,22 +408,17 @@ fn test_codegen_function_cache() {
 /// `Funcache` is only consulted when a `FunctionDependencyGraph` is passed into `codegen`.
 #[test]
 fn funcache_without_dependency_graph_does_not_store_entries() {
-    let opts: Rc<dyn CompilerOpts> = Rc::new(DefaultCompilerOpts::new("*fc-no-graph*")).set_dialect(
-        AcceptedDialect {
+    let opts: Rc<dyn CompilerOpts> = Rc::new(DefaultCompilerOpts::new("*fc-no-graph*"))
+        .set_dialect(AcceptedDialect {
             stepping: Some(25),
             strict: true,
             int_fix: true,
             extra_numeric_constants: false,
-        },
-    );
+        });
     let loc = Srcloc::start("*fc-no-graph*");
-    let parsed = parse_sexp(
-        loc.clone(),
-        "(mod (X) (defun F (Y) (+ Y 1)) (F X))".bytes(),
-    )
-    .expect("parse");
-    let FrontendOutput::CompileForm(cf) = frontend(opts.clone(), &parsed).expect("frontend")
-    else {
+    let parsed =
+        parse_sexp(loc.clone(), "(mod (X) (defun F (Y) (+ Y 1)) (F X))".bytes()).expect("parse");
+    let FrontendOutput::CompileForm(cf) = frontend(opts.clone(), &parsed).expect("frontend") else {
         panic!("expected CompileForm");
     };
     let desugared = do_desugar(&cf).expect("desugar");

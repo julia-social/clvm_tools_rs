@@ -22,9 +22,7 @@ const TEST_CLSP: &str = "module_cache_try.clsp";
 fn sample_program_hex() -> String {
     let mut allocator = Allocator::new();
     let loc = Srcloc::start(&"*hex*".to_string());
-    let sexp = parse_sexp(loc.clone(), "(q . 99)".bytes())
-        .expect("parse")[0]
-        .clone();
+    let sexp = parse_sexp(loc.clone(), "(q . 99)".bytes()).expect("parse")[0].clone();
     let converted = convert_to_clvm_rs(&mut allocator, sexp).expect("convert");
     let mut stream = Stream::new(None);
     stream.write(sexp_as_bin(&mut allocator, converted));
@@ -129,7 +127,10 @@ fn try_from_cache_hits_when_main_program_hex_present() {
     };
     assert_eq!(mo.components.len(), 1);
     assert_eq!(mo.components[0].shortname, b"program".to_vec());
-    assert_eq!(mo.components[0].filename, TEST_CLSP.replace(".clsp", ".hex"));
+    assert_eq!(
+        mo.components[0].filename,
+        TEST_CLSP.replace(".clsp", ".hex")
+    );
 
     let hash_path = format!("{}_hash.hex", TEST_CLSP.trim_end_matches(".clsp"));
     assert!(
