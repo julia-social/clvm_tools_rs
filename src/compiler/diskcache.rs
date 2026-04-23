@@ -99,16 +99,21 @@ mod tests {
     fn cache_key_changes_with_concatenated_fingerprints() {
         let loc = Srcloc::start(&"b.clsp".to_string());
         let mut cf = empty_compileform(loc.clone());
-        let desc = |fp: Vec<u8>| IncludeDesc {
+        let fp = |prefix: &[u8]| {
+            let mut a = [0u8; 32];
+            a[..prefix.len()].copy_from_slice(prefix);
+            a
+        };
+        let desc = |fp: [u8; 32]| IncludeDesc {
             kw: loc.clone(),
             nl: loc.clone(),
             name: b"x".to_vec(),
             kind: None,
             fingerprint: fp,
         };
-        cf.include_forms.push(desc(vec![1, 2, 3]));
+        cf.include_forms.push(desc(fp(&[1, 2, 3])));
         let k1 = cache_key(&cf);
-        cf.include_forms.push(desc(vec![4, 5]));
+        cf.include_forms.push(desc(fp(&[4, 5])));
         let k2 = cache_key(&cf);
         assert_ne!(k1, k2);
         cf.include_forms.truncate(1);
@@ -120,12 +125,15 @@ mod tests {
     fn cache_key_main_fingerprint_style() {
         let loc = Srcloc::start(&"c.clsp".to_string());
         let mut cf = empty_compileform(loc.clone());
+        let mut main_fp = [0u8; 32];
+        main_fp[0] = 0xab;
+        main_fp[1] = 0xcd;
         cf.include_forms.push(IncludeDesc {
             kw: loc.clone(),
             nl: loc.clone(),
             name: b"main".to_vec(),
             kind: Some(IncludeProcessType::Compiled),
-            fingerprint: vec![0xab, 0xcd],
+            fingerprint: main_fp,
         });
         let k = cache_key(&cf);
         assert!(!k.is_empty());
