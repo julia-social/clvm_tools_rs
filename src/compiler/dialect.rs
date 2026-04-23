@@ -165,6 +165,21 @@ lazy_static! {
                     content: indoc! {"()"}.to_string(),
                 },
             ),
+            (
+                "*standard-cl-26*",
+                DialectDescription {
+                    accepted: AcceptedDialect {
+                        stepping: Some(26),
+                        strict: true,
+                        int_fix: true,
+                        extra_numeric_constants: false,
+                    },
+                    content: indoc! {"(
+                    (defconstant *chialisp-version* 26)
+                )"}
+                    .to_string(),
+                },
+            ),
         ];
         for (n, v) in dialect_list.iter() {
             dialects.insert(n.to_string(), v.clone());

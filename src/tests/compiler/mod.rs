@@ -12,6 +12,7 @@ mod compiler;
 mod evaluate;
 mod fuzz;
 mod fuzz_assign;
+mod module_cache;
 mod modules;
 mod optimizer;
 mod preprocessor;

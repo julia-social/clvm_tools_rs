@@ -637,7 +637,9 @@ impl Preprocessor {
             self.opts.read_new_file(self.opts.filename(), filename_clsp)
         {
             // Hash newly read input.
-            let content_hash = sha256tree_from_atom(&content);
+            let content_hash: [u8; 32] = sha256tree_from_atom(&content)
+                .try_into()
+                .expect("sha256tree_from_atom returns 32 bytes");
             includes.push(IncludeDesc {
                 kw: kw.clone(),
                 nl: nl.clone(),
@@ -669,7 +671,9 @@ impl Preprocessor {
             nl: nl.clone(),
             name: full_name.as_bytes().to_vec(),
             kind: Some(IncludeProcessType::Module(Box::new(kind.clone()))),
-            fingerprint: sha256tree_from_atom(&content),
+            fingerprint: sha256tree_from_atom(&content)
+                .try_into()
+                .expect("sha256tree_from_atom returns 32 bytes"),
         });
 
         Ok(res)
@@ -806,7 +810,9 @@ impl Preprocessor {
         let (full_name, content) = self.opts.read_new_file(self.opts.filename(), name_string)?;
 
         // Hash newly read input.
-        let content_hash = sha256tree_from_atom(&content);
+        let content_hash: [u8; 32] = sha256tree_from_atom(&content)
+            .try_into()
+            .expect("sha256tree_from_atom returns 32 bytes");
         includes.push(IncludeDesc {
             name: full_name.as_bytes().to_vec(),
             fingerprint: content_hash,
@@ -1117,7 +1123,7 @@ impl Preprocessor {
                 nl: import.nl.clone(),
                 name: fname.clone(),
                 kind: Some(mod_kind.clone()),
-                fingerprint: Vec::new(),
+                fingerprint: [0u8; 32],
             }),
             mod_kind,
             fname.clone(),
@@ -1181,7 +1187,7 @@ impl Preprocessor {
                 nl: nl.clone(),
                 name: fname.clone(),
                 kind: None,
-                fingerprint: Vec::new(),
+                fingerprint: [0u8; 32],
             })));
         }
 
@@ -1218,7 +1224,7 @@ impl Preprocessor {
                         nl: nl.clone(),
                         kind: Some(IncludeProcessType::Hex),
                         name: fname.clone(),
-                        fingerprint: Vec::new(),
+                        fingerprint: [0u8; 32],
                     }),
                     IncludeProcessType::Hex,
                     name.clone(),
@@ -1230,7 +1236,7 @@ impl Preprocessor {
                         nl: nl.clone(),
                         kind: Some(IncludeProcessType::Bin),
                         name: fname.clone(),
-                        fingerprint: Vec::new(),
+                        fingerprint: [0u8; 32],
                     }),
                     IncludeProcessType::Bin,
                     name.clone(),
@@ -1242,7 +1248,7 @@ impl Preprocessor {
                         nl: nl.clone(),
                         kind: Some(IncludeProcessType::SExpression),
                         name: fname.clone(),
-                        fingerprint: Vec::new(),
+                        fingerprint: [0u8; 32],
                     }),
                     IncludeProcessType::SExpression,
                     name.clone(),
@@ -1275,7 +1281,7 @@ impl Preprocessor {
                     nl: nl.clone(),
                     kind: Some(IncludeProcessType::Compiled),
                     name: fname.clone(),
-                    fingerprint: Vec::new(),
+                    fingerprint: [0u8; 32],
                 }),
                 IncludeProcessType::Compiled,
                 name.clone(),
