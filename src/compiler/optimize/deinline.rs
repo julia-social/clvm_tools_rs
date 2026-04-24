@@ -60,17 +60,21 @@ pub fn deinline_opt(
         context.funcache = Some(Funcache::default());
     }
 
-    let depgraph = FunctionDependencyGraph::new_with_options(
-        &compileform,
-        DepgraphOptions {
-            with_constants: true,
-        },
-    );
+    let is_module_compile = opts.module_phase().is_some();
+    let depgraph = if is_module_compile {
+        FunctionDependencyGraph::new_with_options(
+            &compileform,
+            DepgraphOptions {
+                with_constants: true,
+            },
+        )
+    } else {
+        FunctionDependencyGraph::new(&compileform)
+    };
 
     let mut best_compileform = compileform.clone();
     let generated_program = codegen(context, opts.clone(), Some(&depgraph), &best_compileform)?;
     let mut metric = sexp_scale(&generated_program);
-    let is_module_compile = opts.module_phase().is_some();
 
     let flip_helper = |h: &mut HelperForm| {
         if let HelperForm::Defun(inline, defun) = h {
