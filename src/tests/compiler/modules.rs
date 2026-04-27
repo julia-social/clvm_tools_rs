@@ -771,16 +771,28 @@ fn test_introspective_constant_deterministic() {
 
     let mut alloc1 = Allocator::new();
     let runner1 = Rc::new(DefaultProgramRunner::new());
-    let r1 = perform_compile_of_file(&mut alloc1, runner1, source_opts_1.clone(), filename, &content)
-        .expect("first compile");
+    let r1 = perform_compile_of_file(
+        &mut alloc1,
+        runner1,
+        source_opts_1.clone(),
+        filename,
+        &content,
+    )
+    .expect("first compile");
     let CompilerOutput::Module(m1) = r1.compiled else {
         panic!("expected module");
     };
 
     let mut alloc2 = Allocator::new();
     let runner2 = Rc::new(DefaultProgramRunner::new());
-    let r2 = perform_compile_of_file(&mut alloc2, runner2, source_opts_2.clone(), filename, &content)
-        .expect("second compile");
+    let r2 = perform_compile_of_file(
+        &mut alloc2,
+        runner2,
+        source_opts_2.clone(),
+        filename,
+        &content,
+    )
+    .expect("second compile");
     let CompilerOutput::Module(m2) = r2.compiled else {
         panic!("expected module");
     };
@@ -795,7 +807,8 @@ fn test_introspective_constant_deterministic() {
             .get_written_file(&c2.filename)
             .map(|b| decode_string(&b));
         assert_eq!(
-            hex1, hex2,
+            hex1,
+            hex2,
             "hex must be deterministic for {}",
             decode_string(&c1.shortname)
         );

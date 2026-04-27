@@ -207,19 +207,21 @@ fn disk_cache_hit_after_full_compile() {
     // The fresh compile produces both primary exports and _hash sidecars as
     // components; the cache-hit path only returns the primary exports (hashes
     // are written as sidecar files). Filter to primary exports for comparison.
-    let primary = |cs: &[crate::compiler::comptypes::CompileModuleComponent]| -> Vec<(Vec<u8>, String)> {
-        cs.iter()
-            .filter(|c| !c.shortname.ends_with(b"_hash"))
-            .map(|c| (c.shortname.clone(), c.content.to_string()))
-            .collect::<Vec<_>>()
-    };
+    let primary =
+        |cs: &[crate::compiler::comptypes::CompileModuleComponent]| -> Vec<(Vec<u8>, String)> {
+            cs.iter()
+                .filter(|c| !c.shortname.ends_with(b"_hash"))
+                .map(|c| (c.shortname.clone(), c.content.to_string()))
+                .collect::<Vec<_>>()
+        };
     let p1 = primary(&m1.components);
     let p2 = primary(&m2.components);
     assert_eq!(p1.len(), p2.len());
     for ((name1, hex1), (name2, hex2)) in p1.iter().zip(p2.iter()) {
         assert_eq!(name1, name2);
         assert_eq!(
-            hex1, hex2,
+            hex1,
+            hex2,
             "re-compiled hex must match for {}",
             String::from_utf8_lossy(name1)
         );
@@ -250,8 +252,16 @@ fn disk_cache_miss_after_source_edit() {
     };
 
     // The hex should differ because the cache key changed (main fingerprint changed).
-    let hexes1: Vec<String> = m1.components.iter().map(|c| c.content.to_string()).collect();
-    let hexes2: Vec<String> = m2.components.iter().map(|c| c.content.to_string()).collect();
+    let hexes1: Vec<String> = m1
+        .components
+        .iter()
+        .map(|c| c.content.to_string())
+        .collect();
+    let hexes2: Vec<String> = m2
+        .components
+        .iter()
+        .map(|c| c.content.to_string())
+        .collect();
     assert_ne!(
         hexes1, hexes2,
         "edited source must produce different hex (cache should miss)"

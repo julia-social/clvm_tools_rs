@@ -490,7 +490,8 @@ fn funcache_key_same_across_dialects_different_output() {
 /// helper as well as for the overall program.
 #[test]
 fn funcache_cold_vs_warm_roundtrip() {
-    let orig_opts: Rc<dyn CompilerOpts> = Rc::new(DefaultCompilerOpts::new(&"*roundtrip*".to_string()));
+    let orig_opts: Rc<dyn CompilerOpts> =
+        Rc::new(DefaultCompilerOpts::new(&"*roundtrip*".to_string()));
     let opts: Rc<dyn CompilerOpts> = orig_opts
         .set_search_paths(&["resources/tests/module".to_string(), ".".to_string()])
         .set_stdenv(false)
@@ -508,7 +509,8 @@ fn funcache_cold_vs_warm_roundtrip() {
             "resources/tests/module/cache-test-1.clsp".to_string(),
         )
         .expect("read");
-    let parsed = parse_sexp(Srcloc::start(&opts.filename()), content.iter().cloned()).expect("parse");
+    let parsed =
+        parse_sexp(Srcloc::start(&opts.filename()), content.iter().cloned()).expect("parse");
     let program = frontend(opts.clone(), &parsed).expect("frontend");
     let (mut compileform, exports) = if let FrontendOutput::Module(cf, ex) = program {
         (cf, ex)
@@ -539,8 +541,8 @@ fn funcache_cold_vs_warm_roundtrip() {
         Box::new(Strategy23 {}),
     );
     ctx_cold.funcache = Some(Funcache::default());
-    let out_cold = codegen(&mut ctx_cold, opts.clone(), Some(&depgraph), &desugared)
-        .expect("codegen cold");
+    let out_cold =
+        codegen(&mut ctx_cold, opts.clone(), Some(&depgraph), &desugared).expect("codegen cold");
     let cold_cache = ctx_cold.funcache.as_ref().unwrap().function_outputs.clone();
     assert!(!cold_cache.is_empty(), "cold run should populate cache");
 
@@ -554,8 +556,8 @@ fn funcache_cold_vs_warm_roundtrip() {
     ctx_warm.funcache = Some(Funcache {
         function_outputs: cold_cache.clone(),
     });
-    let out_warm = codegen(&mut ctx_warm, opts.clone(), Some(&depgraph), &desugared)
-        .expect("codegen warm");
+    let out_warm =
+        codegen(&mut ctx_warm, opts.clone(), Some(&depgraph), &desugared).expect("codegen warm");
 
     assert_eq!(
         out_cold.to_string(),
@@ -565,9 +567,12 @@ fn funcache_cold_vs_warm_roundtrip() {
 
     let warm_cache = ctx_warm.funcache.as_ref().unwrap().function_outputs.clone();
     for (key, cold_entry) in cold_cache.iter() {
-        let warm_entry = warm_cache
-            .get(key)
-            .unwrap_or_else(|| panic!("warm cache missing key for {}", decode_string(&cold_entry.name)));
+        let warm_entry = warm_cache.get(key).unwrap_or_else(|| {
+            panic!(
+                "warm cache missing key for {}",
+                decode_string(&cold_entry.name)
+            )
+        });
         assert_eq!(
             cold_entry.code.to_string(),
             warm_entry.code.to_string(),
