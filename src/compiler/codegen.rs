@@ -1296,7 +1296,9 @@ fn codegen_(
                         .as_ref()
                         .and_then(|c| c.function_outputs.get(key).map(|e| e.code.clone()))
                 }) {
-                    check_already_present(code.clone())?;
+                    if !allow_redef {
+                        check_already_present(code.clone())?;
+                    }
                     return Ok(compiler.add_defun(
                         &defun.name,
                         defun.orig_args.clone(),
