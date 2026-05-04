@@ -2856,9 +2856,6 @@ pub fn codegen(
         }
     }
 
-    // If stepping 23 or greater, we support no-env mode.
-    enable_nil_env_mode_for_stepping_23_or_greater(opts.clone(), &mut code_generator);
-
     context
         .symbols()
         .clone_from(&code_generator.function_symbols);
