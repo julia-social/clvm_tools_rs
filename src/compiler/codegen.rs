@@ -1989,7 +1989,7 @@ fn decide_constant_generation_order(
     for h in helpers.iter() {
         let do_include = match h {
             HelperForm::Defconstant(dc) => {
-                matches!(dc.kind, ConstantKind::Module(false))
+                matches!(dc.kind, ConstantKind::Module)
             }
             HelperForm::Defun(false, _) => true,
             _ => false,
@@ -2025,7 +2025,7 @@ fn decide_constant_generation_order(
         .iter()
         .filter(|h| {
             if let HelperForm::Defconstant(dc) = h {
-                return matches!(dc.kind, ConstantKind::Module(true));
+                return matches!(dc.kind, ConstantKind::Module);
             }
 
             false
@@ -2189,7 +2189,6 @@ fn generate_complex_constant_body(
             },
             opts.set_module_phase(new_phase),
             program,
-            false,
             h,
             defc,
         );
@@ -2232,22 +2231,9 @@ fn generate_module_constant_body(
     code_generator: PrimaryCodegen,
     opts: Rc<dyn CompilerOpts>,
     program: CompileForm,
-    module_constant_type: bool,
     h: &HelperForm,
     defc: &DefconstData,
 ) -> Result<PrimaryCodegen, CompileErr> {
-    if module_constant_type {
-        let env: &SExp = code_generator.env.borrow();
-        let cg = PrimaryCodegen {
-            module_phase: code_generator
-                .module_phase
-                .as_ref()
-                .map(|_| ModulePhase::CommonConstant(env.clone())),
-            ..code_generator.clone()
-        };
-        return generate_complex_constant_body(context, cg, opts, program, h, defc);
-    }
-
     let constant_program = CompileForm {
         helpers: program
             .helpers
@@ -2303,12 +2289,11 @@ fn generate_helper_body(
             ConstantKind::Complex => {
                 generate_complex_constant_body(context, code_generator, opts, program, h, defc)
             }
-            ConstantKind::Module(mtype) => generate_module_constant_body(
+            ConstantKind::Module => generate_module_constant_body(
                 context,
                 code_generator,
                 opts,
                 program,
-                mtype,
                 h,
                 defc,
             ),

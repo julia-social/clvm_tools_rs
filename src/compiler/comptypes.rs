@@ -284,7 +284,7 @@ pub enum ConstantKind {
     Simple,
     /// Module toplevel constants have extra guarantees which need a different
     /// resolution style.
-    Module(bool),
+    Module,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
