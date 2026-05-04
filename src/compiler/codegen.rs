@@ -2289,14 +2289,9 @@ fn generate_helper_body(
             ConstantKind::Complex => {
                 generate_complex_constant_body(context, code_generator, opts, program, h, defc)
             }
-            ConstantKind::Module => generate_module_constant_body(
-                context,
-                code_generator,
-                opts,
-                program,
-                h,
-                defc,
-            ),
+            ConstantKind::Module => {
+                generate_module_constant_body(context, code_generator, opts, program, h, defc)
+            }
         },
         HelperForm::Defmacro(mac) => {
             let macro_program = Rc::new(SExp::Cons(
