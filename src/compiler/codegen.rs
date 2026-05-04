@@ -2076,15 +2076,7 @@ fn decide_constant_generation_order(
             constant_set.remove(least_constant.name());
             result.append(&mut functions_it_depends_on);
             result.push(least_constant.clone());
-            continue;
         }
-
-        let mod_constant_names: Vec<String> =
-            constants.iter().map(|h| decode_string(h.name())).collect();
-        return Err(CompileErr(
-            loc.clone(),
-            format!("Deadlock generating module constants {mod_constant_names:?}"),
-        ));
     }
 
     Ok(result)
