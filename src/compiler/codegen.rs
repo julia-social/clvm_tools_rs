@@ -2813,7 +2813,7 @@ pub fn codegen(
             steps += 1;
         }
 
-        if steps == CONSTANT_GENERATIONS_ALLOWED {
+        if prev_repr != this_repr {
             return Err(CompileErr(
                 Srcloc::start(&opts.filename()),
                 "Constant generation didn't converge in allowed iteration limit".to_string(),
