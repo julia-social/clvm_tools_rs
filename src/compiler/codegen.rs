@@ -1897,6 +1897,7 @@ pub fn process_helper_let_bindings(
 fn find_easiest_constant(
     _ce: &CompileForm,
     depgraph: &FunctionDependencyGraph,
+    selected_constants: &HashSet<Vec<u8>>,
     function_set: &HashSet<Vec<u8>>,
     constant_set: &HashSet<Vec<u8>>,
     constants: &[HelperForm],
@@ -1917,8 +1918,13 @@ fn find_easiest_constant(
     for (i, h) in constants_in_set.iter().enumerate() {
         let mut deps_of_constant = HashSet::new();
         depgraph.get_full_depends_on(&mut deps_of_constant, h.name());
+        // Exclude everything that's already resovled and everything
+        // that isn't a constant, yielding only unresolved constants
+        // that this constant depends on.
+        let to_exclude: HashSet<Vec<u8>> =
+            function_set.union(selected_constants).cloned().collect();
         let only_constant_deps: HashSet<Vec<u8>> =
-            deps_of_constant.difference(function_set).cloned().collect();
+            deps_of_constant.difference(&to_exclude).cloned().collect();
         let how_many_deps = only_constant_deps.len();
         if i == 0 || how_many_deps < best_dep_set {
             chosen_idx = i;
@@ -2048,6 +2054,7 @@ fn decide_constant_generation_order(
         },
     );
 
+    let mut selected_constants = HashSet::new();
     let mut result = Vec::new();
 
     while !constant_set.is_empty() {
@@ -2063,9 +2070,15 @@ fn decide_constant_generation_order(
 
         // Break blocks.  We need to unblock a constant so we'll choose the easiest
         // one generate any functions it needs which we haven't generated yet.
-        if let Some(least_constant) =
-            find_easiest_constant(&ce, &depgraph, &function_set, &constant_set, &constants)
-        {
+        if let Some(least_constant) = find_easiest_constant(
+            &ce,
+            &depgraph,
+            &selected_constants,
+            &function_set,
+            &constant_set,
+            &constants,
+        ) {
+            selected_constants.insert(least_constant.name().to_vec());
             let mut functions_it_depends_on_hash = HashSet::new();
             depgraph.get_full_depends_on(&mut functions_it_depends_on_hash, least_constant.name());
             let mut functions_it_depends_on = functions
