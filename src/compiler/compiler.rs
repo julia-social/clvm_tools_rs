@@ -219,7 +219,6 @@ fn modernize_constants(helpers: &mut [HelperForm], standalone_constants: &HashSe
         match h {
             HelperForm::Defconstant(d) => {
                 // Ensure that we upgrade the constant type.
-                d.tabled = false;
                 if standalone_constants.contains(&d.name) {
                     d.kind = ConstantKind::Module;
                 }
@@ -484,9 +483,17 @@ pub fn compile_module(
         .helpers
         .iter()
         .any(|h| matches!(h, HelperForm::Defun(_, _)));
+    let common_phase_has_env =
+        common_program_assume_introspection
+            .helpers
+            .iter()
+            .any(|h| match h {
+                HelperForm::Defun(_, _) => true,
+                HelperForm::Defconstant(d) => d.tabled,
+                _ => false,
+            });
     let (common_opts, mut common_program) = if !common_phase_functions {
-        let new_opts =
-            opts.set_module_phase(Some(ModulePhase::CommonPhase(common_phase_functions)));
+        let new_opts = opts.set_module_phase(Some(ModulePhase::CommonPhase(common_phase_has_env)));
         (
             new_opts.clone(),
             resolve_namespaces(
@@ -535,7 +542,7 @@ pub fn compile_module(
     let second_stage_opts =
         opts.set_module_phase(Some(ModulePhase::StandalonePhase(StandalonePhaseInfo {
             env: env_shape,
-            empty_common_phase: !common_phase_functions,
+            empty_common_phase: !common_phase_has_env,
             left_env_value: env,
         })));
     for fun in exports.iter() {
