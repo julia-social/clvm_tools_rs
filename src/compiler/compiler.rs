@@ -895,7 +895,7 @@ pub fn compile_pre_forms(
 /// how debuggers associate the argument structures with values in the
 /// environment when functions are applied.
 pub fn compile_file(
-    allocator: &mut Allocator,
+    _allocator: &mut Allocator,
     runner: Rc<dyn TRunProgram>,
     opts: Rc<dyn CompilerOpts>,
     content: &str,
@@ -909,14 +909,10 @@ pub fn compile_file(
         0
     };
     let pre_forms = parse_sexp_flags(srcloc.clone(), content.bytes(), flags)?;
-    let mut context_wrapper = CompileContextWrapper::new(
-        allocator,
-        runner,
-        symbol_table,
-        get_optimizer(&srcloc, opts.clone())?,
-    );
+    let mut context_wrapper =
+        CompileContextWrapper::new(runner, symbol_table, get_optimizer(&srcloc, opts.clone())?);
 
-    compile_pre_forms(&mut context_wrapper.context, opts, &pre_forms)
+    compile_pre_forms(&mut context_wrapper.context(), opts, &pre_forms)
 }
 
 impl CompilerOpts for DefaultCompilerOpts {
@@ -1116,12 +1112,11 @@ impl CompilerOpts for DefaultCompilerOpts {
         let me = Rc::new(self.clone());
         let runner = context.runner.clone();
         let mut context_wrapper = CompileContextWrapper::new(
-            &mut context.allocator,
             runner,
             &mut context.symbols,
             get_optimizer(&sexp.loc(), me.clone())?,
         );
-        compile_pre_forms(&mut context_wrapper.context, me, &[sexp])
+        compile_pre_forms(&mut context_wrapper.context(), me, &[sexp])
     }
 }
 

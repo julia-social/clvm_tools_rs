@@ -358,10 +358,10 @@ fn constant_fun_result(
 
                 let mut symbols = HashMap::new();
                 let mut wrapper =
-                    CompileContextWrapper::new(allocator, runner.clone(), &mut symbols, optimizer);
+                    CompileContextWrapper::new(runner.clone(), &mut symbols, optimizer);
 
                 if let Ok(code) = codegen(
-                    &mut wrapper.context,
+                    &mut wrapper.context(),
                     opts.clone(),
                     depgraph.as_ref(),
                     &to_compile,
@@ -558,13 +558,10 @@ pub fn optimize_expr(
                 if stepping >= 23 {
                     let mut throwaway_symbols = HashMap::new();
                     if let Ok(optimizer) = get_optimizer(l, opts.clone()) {
-                        let mut wrapper = CompileContextWrapper::new(
-                            allocator,
-                            runner,
-                            &mut throwaway_symbols,
-                            optimizer,
-                        );
-                        if let Ok(compiled) = do_mod_codegen(&mut wrapper.context, opts.clone(), cf)
+                        let mut wrapper =
+                            CompileContextWrapper::new(runner, &mut throwaway_symbols, optimizer);
+                        if let Ok(compiled) =
+                            do_mod_codegen(&mut wrapper.context(), opts.clone(), cf)
                         {
                             if let Ok(NodeSel::Cons(_, body)) =
                                 NodeSel::Cons(AtomValue::Here(&[1]), ThisNode)

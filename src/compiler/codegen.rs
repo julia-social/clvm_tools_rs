@@ -914,7 +914,7 @@ fn compile_call(
                     let mut context_wrapper =
                         CompileContextWrapper::from_context(context, &mut unused_symbol_table);
                     let code = updated_opts
-                        .compile_program(&mut context_wrapper.context, Rc::new(use_body))?;
+                        .compile_program(&mut context_wrapper.context(), Rc::new(use_body))?;
 
                     match code {
                         CompilerOutput::Program(_, code) => Ok(CompiledCode(
@@ -955,7 +955,7 @@ pub fn do_mod_codegen(
         .set_module_phase(None);
     let mut throwaway_symbols = HashMap::new();
     let mut context_wrapper = CompileContextWrapper::from_context(context, &mut throwaway_symbols);
-    let code = codegen(&mut context_wrapper.context, without_env, None, program)?;
+    let code = codegen(&mut context_wrapper.context(), without_env, None, program)?;
     Ok(CompiledCode(
         program.loc.clone(),
         Rc::new(SExp::Cons(
@@ -1368,7 +1368,7 @@ fn codegen_(
                     let mut context_wrapper =
                         CompileContextWrapper::from_context(context, &mut unused_symbol_table);
                     let code = updated_opts
-                        .compile_program(&mut context_wrapper.context, Rc::new(tocompile))?;
+                        .compile_program(&mut context_wrapper.context(), Rc::new(tocompile))?;
                     match code {
                         CompilerOutput::Program(_, p) => p,
                         CompilerOutput::Module(_) => {
@@ -2126,7 +2126,7 @@ fn generate_simple_constant_body(
     let runner = context.runner();
     let mut context_wrapper = CompileContextWrapper::from_context(context, &mut unused_symbols);
     let code = match updated_opts
-        .compile_program(&mut context_wrapper.context, Rc::new(expand_program))?
+        .compile_program(&mut context_wrapper.context(), Rc::new(expand_program))?
     {
         CompilerOutput::Program(_, code) => code,
         CompilerOutput::Module(_) => {
@@ -2138,7 +2138,7 @@ fn generate_simple_constant_body(
     };
 
     run(
-        context_wrapper.context.allocator(),
+        context_wrapper.context().allocator(),
         runner,
         opts.prim_map(),
         Rc::new(code),
@@ -2249,13 +2249,13 @@ fn generate_module_constant_body(
     let runner = context.runner();
     let mut context_wrapper = CompileContextWrapper::from_context(context, &mut unused_symbols);
     let code = compile_from_compileform(
-        &mut context_wrapper.context,
+        &mut context_wrapper.context(),
         updated_opts.clone(),
         constant_program,
     )?;
 
     run(
-        context_wrapper.context.allocator(),
+        context_wrapper.context().allocator(),
         runner,
         opts.prim_map(),
         Rc::new(code),
@@ -2311,19 +2311,20 @@ fn generate_helper_body(
             let mut unused_symbols = HashMap::new();
             let mut context_wrapper =
                 CompileContextWrapper::from_context(context, &mut unused_symbols);
-            let code =
-                match updated_opts.compile_program(&mut context_wrapper.context, macro_program)? {
-                    CompilerOutput::Program(_, p) => p,
-                    CompilerOutput::Module(_) => {
-                        return Err(CompileErr(
-                            mac.loc.clone(),
-                            "Module result from macro not supported".to_string(),
-                        ));
-                    }
-                };
+            let code = match updated_opts
+                .compile_program(&mut context_wrapper.context(), macro_program)?
+            {
+                CompilerOutput::Program(_, p) => p,
+                CompilerOutput::Module(_) => {
+                    return Err(CompileErr(
+                        mac.loc.clone(),
+                        "Module result from macro not supported".to_string(),
+                    ));
+                }
+            };
 
             let optimized_code = context_wrapper
-                .context
+                .context()
                 .macro_optimization(opts.clone(), Rc::new(code.clone()))?;
 
             Ok(code_generator.add_macro(&mac.name, optimized_code))
