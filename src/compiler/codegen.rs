@@ -185,6 +185,19 @@ fn compute_env_shape(
                 return Ok(SExp::Cons(l.clone(), extra_env_tree, args));
             }
 
+            // The environment construction here allows the standalone phase functions
+            // to work with a larger env (all_env) than the functions in common phase
+            // which use old_env.  Anything in extra_env_tree is environment data that
+            // belongs only to the environment viewed from the current export's
+            // perspective.  Being in the standalone phase means that it is an export
+            // that is not depended on by anthing else in the program.
+            //
+            // As such it is generated as a standalone progarm with the common environment
+            // for comment phase functions in old_env and anything its own environment
+            // needs is provided separately by extra_env_tree above.  Because the
+            // the standalone phase processes all of the standalone exports in the
+            // program, it's intended that each receives it's own supplemental env
+            // tree here.
             if let SExp::Cons(l, all_env, _) = sp.env.borrow() {
                 if let SExp::Cons(_l, old_env, _) = all_env.borrow() {
                     return Ok(SExp::Cons(
