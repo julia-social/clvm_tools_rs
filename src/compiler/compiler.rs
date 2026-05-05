@@ -218,10 +218,8 @@ fn modernize_constants(helpers: &mut [HelperForm], standalone_constants: &HashSe
     for h in helpers.iter_mut() {
         match h {
             // Ensure that we upgrade the constant type.
-            HelperForm::Defconstant(d) => {
-                if standalone_constants.contains(&d.name) {
-                    d.kind = ConstantKind::Module;
-                }
+            HelperForm::Defconstant(d) if standalone_constants.contains(&d.name) => {
+                d.kind = ConstantKind::Module;
             }
             HelperForm::Defnamespace(ns) => {
                 modernize_constants(&mut ns.helpers, standalone_constants);
