@@ -43,7 +43,7 @@ impl Optimization for ExistingStrategy {
                 Box::new(self.clone()),
             );
             // Front end optimization
-            fe_opt(&mut wrapper.context(), opts.clone(), p0)
+            fe_opt(wrapper.context(), opts.clone(), p0)
         } else {
             Ok(p0)
         }
@@ -59,7 +59,7 @@ impl Optimization for ExistingStrategy {
         if opts.frontend_opt() && opts.dialect().stepping.map(|s| s > 22).unwrap_or(false) {
             let mut symbols = HashMap::new();
             let mut wrapper = CompileContextWrapper::new(runner, &mut symbols, self.duplicate());
-            deinline_opt(&mut wrapper.context(), opts.clone(), cf)
+            deinline_opt(wrapper.context(), opts.clone(), cf)
         } else {
             Ok(cf)
         }

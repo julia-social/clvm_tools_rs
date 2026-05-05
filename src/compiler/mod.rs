@@ -274,7 +274,7 @@ impl BasicCompileContext {
 
 enum ContextHolder<'a> {
     ByRef(&'a mut BasicCompileContext),
-    ByVal(BasicCompileContext),
+    ByVal(Box<BasicCompileContext>),
 }
 
 /// A wrapper that owns a BasicCompileContext and remembers a mutable reference
@@ -313,7 +313,7 @@ impl<'a> CompileContextWrapper<'a> {
         let bcc = BasicCompileContext::new(Allocator::new(), runner, HashMap::new(), optimizer);
         let mut wrapper = CompileContextWrapper {
             symbols,
-            context_: ContextHolder::ByVal(bcc),
+            context_: ContextHolder::ByVal(Box::new(bcc)),
         };
         wrapper.switch();
         wrapper

@@ -92,7 +92,7 @@ impl Optimization for Strategy23 {
     ) -> Result<CompileForm, CompileErr> {
         let mut symbols = HashMap::new();
         let mut wrapper = CompileContextWrapper::new(runner, &mut symbols, self.duplicate());
-        deinline_opt(&mut wrapper.context(), opts.clone(), cf)
+        deinline_opt(wrapper.context(), opts.clone(), cf)
     }
 
     fn start_of_codegen_optimization(

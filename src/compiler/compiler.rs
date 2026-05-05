@@ -912,7 +912,7 @@ pub fn compile_file(
     let mut context_wrapper =
         CompileContextWrapper::new(runner, symbol_table, get_optimizer(&srcloc, opts.clone())?);
 
-    compile_pre_forms(&mut context_wrapper.context(), opts, &pre_forms)
+    compile_pre_forms(context_wrapper.context(), opts, &pre_forms)
 }
 
 impl CompilerOpts for DefaultCompilerOpts {
@@ -1116,7 +1116,7 @@ impl CompilerOpts for DefaultCompilerOpts {
             &mut context.symbols,
             get_optimizer(&sexp.loc(), me.clone())?,
         );
-        compile_pre_forms(&mut context_wrapper.context(), me, &[sexp])
+        compile_pre_forms(context_wrapper.context(), me, &[sexp])
     }
 }
 

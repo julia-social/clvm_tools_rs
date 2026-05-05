@@ -361,7 +361,7 @@ fn constant_fun_result(
                     CompileContextWrapper::new(runner.clone(), &mut symbols, optimizer);
 
                 if let Ok(code) = codegen(
-                    &mut wrapper.context(),
+                    wrapper.context(),
                     opts.clone(),
                     depgraph.as_ref(),
                     &to_compile,
@@ -560,9 +560,7 @@ pub fn optimize_expr(
                     if let Ok(optimizer) = get_optimizer(l, opts.clone()) {
                         let mut wrapper =
                             CompileContextWrapper::new(runner, &mut throwaway_symbols, optimizer);
-                        if let Ok(compiled) =
-                            do_mod_codegen(&mut wrapper.context(), opts.clone(), cf)
-                        {
+                        if let Ok(compiled) = do_mod_codegen(wrapper.context(), opts.clone(), cf) {
                             if let Ok(NodeSel::Cons(_, body)) =
                                 NodeSel::Cons(AtomValue::Here(&[1]), ThisNode)
                                     .select_nodes(compiled.1)

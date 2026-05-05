@@ -551,7 +551,7 @@ impl Preprocessor {
             get_optimizer(&srcloc, opts.clone())?,
         );
 
-        match compile_pre_forms(&mut context_wrapper.context(), opts.clone(), &pre_forms)? {
+        match compile_pre_forms(context_wrapper.context(), opts.clone(), &pre_forms)? {
             CompilerOutput::Module(module_output) => {
                 let mut output = Vec::new();
                 for c in module_output.components.iter() {
@@ -961,7 +961,7 @@ impl Preprocessor {
         let new_program = resolve_namespaces(self.opts.clone(), &starting_program)?;
 
         let compiled_program =
-            compile_from_compileform(&mut wrapper.context(), self.opts.clone(), new_program)?;
+            compile_from_compileform(wrapper.context(), self.opts.clone(), new_program)?;
         self.stored_macros.insert(
             found_name.clone(),
             StoredMacro::Compiled(Rc::new(compiled_program.clone())),
