@@ -217,8 +217,8 @@ pub fn find_exported_helper(
 fn modernize_constants(helpers: &mut [HelperForm], standalone_constants: &HashSet<Vec<u8>>) {
     for h in helpers.iter_mut() {
         match h {
+            // Ensure that we upgrade the constant type.
             HelperForm::Defconstant(d) => {
-                // Ensure that we upgrade the constant type.
                 if standalone_constants.contains(&d.name) {
                     d.kind = ConstantKind::Module;
                 }
