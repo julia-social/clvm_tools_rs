@@ -824,7 +824,7 @@ fn compile_chialisp_043_to_hex(program: &str) -> String {
         .capture()
         .expect("should run");
     eprintln!("{}", program_run.stderr_str());
-    compiler_output_to_hex("current compiler", program, &program_run.stdout_str())
+    compiler_output_to_hex("compiler 0.4.3", program, &program_run.stdout_str())
 }
 
 #[test]
