@@ -2385,8 +2385,8 @@ fn test_cse_breakage_example() {
         program.clone(),
         "(())".to_string(),
     ])
-        .trim()
-        .to_string();
+    .trim()
+    .to_string();
     assert_eq!(run_result_11, "((a 3) (a 3) (a 3))");
 }
 
@@ -2405,8 +2405,8 @@ fn test_cse_breakage_example_lift_outside_bindings() {
         program.clone(),
         "(())".to_string(),
     ])
-        .trim()
-        .to_string();
+    .trim()
+    .to_string();
     assert_eq!(run_result_11, "1");
 }
 

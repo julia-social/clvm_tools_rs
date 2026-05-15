@@ -416,7 +416,10 @@ pub fn cse_classify_by_conditions(
         .collect()
 }
 
-fn detect_common_cse_root(ceiling: Option<&Vec<BodyformPathArc>>, instances: &[CSEInstance]) -> Option<Vec<BodyformPathArc>> {
+fn detect_common_cse_root(
+    ceiling: Option<&Vec<BodyformPathArc>>,
+    instances: &[CSEInstance],
+) -> Option<Vec<BodyformPathArc>> {
     // No instances, we can choose the root.
     let min_size = if let Some(m) = instances.iter().map(|i| i.path.len()).min() {
         m
@@ -445,8 +448,6 @@ fn detect_common_cse_root(ceiling: Option<&Vec<BodyformPathArc>>, instances: &[C
         }
 
         if let Some(ceiling) = ceiling {
-            eprintln!("examining path {target_path:?}");
-            eprintln!("have ceiling {ceiling:?}");
             if ceiling.len() > idx || (ceiling.len() == idx && target_path[0..idx] != *ceiling) {
                 return None;
             }
@@ -601,15 +602,16 @@ fn match_bindings(bindings: &[Rc<Binding>], used_names: &HashSet<Vec<u8>>) -> Ha
     for b in bindings.iter() {
         match &b.pattern {
             BindingPattern::Name(n) => {
-                let n_ref: &[u8] = &n;
+                let n_ref: &[u8] = n;
                 if used_names.contains(n_ref) {
                     new_set.insert(n.clone());
                 }
             }
             BindingPattern::Complex(p) => {
-                let names: HashSet<Vec<u8>> = collect_used_names_sexp(p.clone()).into_iter().collect();
+                let names: HashSet<Vec<u8>> =
+                    collect_used_names_sexp(p.clone()).into_iter().collect();
                 for n in names.iter() {
-                    let n_ref: &[u8] = &n;
+                    let n_ref: &[u8] = n;
                     if used_names.contains(n_ref) {
                         new_set.insert(n.clone());
                     }
@@ -703,7 +705,9 @@ pub fn cse_optimize_bodyform(
                 ));
             };
 
-            let used_names: HashSet<Vec<u8>> = collect_used_names_bodyform(&prototype_instance).into_iter().collect();
+            let used_names: HashSet<Vec<u8>> = collect_used_names_bodyform(&prototype_instance)
+                .into_iter()
+                .collect();
             // Detect the ceiling for this cse move.  It can only go to the body of a
             // containing assignment form that binds a name it needs.
             //
@@ -711,18 +715,15 @@ pub fn cse_optimize_bodyform(
             // of the common subexpression is in a binding that uses other bound values.
             let mut ceiling = None;
             for instance in d.instances.iter() {
-                for (idx, f) in instance.path.iter().enumerate().rev() {
-                    let want_path: Vec<BodyformPathArc> = instance.path.iter().take(idx).cloned().collect();
-                    if let Some(target) = retrieve_bodyform(&want_path, &function_body, &|b: &BodyForm| {
-                        b.clone()
-                    }) {
+                for (idx, _f) in instance.path.iter().enumerate().rev() {
+                    let want_path: Vec<BodyformPathArc> =
+                        instance.path.iter().take(idx).cloned().collect();
+                    if let Some(target) =
+                        retrieve_bodyform(&want_path, &function_body, &|b: &BodyForm| b.clone())
+                    {
                         if let BodyForm::Let(_, data) = &target {
-                            let names_provided_by_let_in_cse = match_bindings(&data.bindings, &used_names);
-                            eprintln!("{}", prototype_instance.to_sexp());
-                            eprintln!("{}", target.to_sexp());
-                            for n in names_provided_by_let_in_cse.iter() {
-                                eprintln!("- {}", decode_string(n));
-                            }
+                            let names_provided_by_let_in_cse =
+                                match_bindings(&data.bindings, &used_names);
                             if !names_provided_by_let_in_cse.is_empty() {
                                 let mut top_possible_body = want_path;
                                 top_possible_body.push(BodyformPathArc::BodyOf);
@@ -756,14 +757,13 @@ pub fn cse_optimize_bodyform(
 
             // Detect the root of the CSE as the innermost expression that covers
             // all uses.
-            let replace_path =
-                match detect_common_cse_root(ceiling.as_ref(), &d.instances) {
-                    Some(rp) => rp,
-                    None => {
-                        // Can't do anything with this if there was no common root.
-                        continue;
-                    }
-                };
+            let replace_path = match detect_common_cse_root(ceiling.as_ref(), &d.instances) {
+                Some(rp) => rp,
+                None => {
+                    // Can't do anything with this if there was no common root.
+                    continue;
+                }
+            };
 
             // Route the captured repeated subexpression into intervening lambdas.
             // This means that the lambdas will gain a capture on the left side of
