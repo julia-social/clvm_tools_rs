@@ -718,18 +718,16 @@ pub fn cse_optimize_bodyform(
                 for (idx, _f) in instance.path.iter().enumerate().rev() {
                     let want_path: Vec<BodyformPathArc> =
                         instance.path.iter().take(idx).cloned().collect();
-                    if let Some(target) =
+                    if let Some(BodyForm::Let(_, data)) =
                         retrieve_bodyform(&want_path, &function_body, &|b: &BodyForm| b.clone())
                     {
-                        if let BodyForm::Let(_, data) = &target {
-                            let names_provided_by_let_in_cse =
-                                match_bindings(&data.bindings, &used_names);
-                            if !names_provided_by_let_in_cse.is_empty() {
-                                let mut top_possible_body = want_path;
-                                top_possible_body.push(BodyformPathArc::BodyOf);
-                                ceiling = Some(top_possible_body);
-                                break;
-                            }
+                        let names_provided_by_let_in_cse =
+                            match_bindings(&data.bindings, &used_names);
+                        if !names_provided_by_let_in_cse.is_empty() {
+                            let mut top_possible_body = want_path;
+                            top_possible_body.push(BodyformPathArc::BodyOf);
+                            ceiling = Some(top_possible_body);
+                            break;
                         }
                     }
                 }
