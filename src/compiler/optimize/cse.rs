@@ -454,7 +454,14 @@ fn detect_common_cse_root(
         }
     }
 
-    // No internal root if there was no let traversal.
+    // No internal root if there was no let traversal. If we found a ceiling,
+    // the top-level root would lift the CSE above a binding it depends on.
+    if let Some(ceiling) = ceiling {
+        if !ceiling.is_empty() {
+            return None;
+        }
+    }
+
     Some(Vec::new())
 }
 
@@ -940,4 +947,24 @@ pub fn cse_optimize_bodyform(
     }
 
     Ok(function_body)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn common_cse_root_rejects_empty_path_above_ceiling() {
+        let ceiling = vec![BodyformPathArc::BodyOf];
+        let instances = vec![
+            CSEInstance {
+                path: vec![BodyformPathArc::LetBinding(1)],
+            },
+            CSEInstance {
+                path: vec![BodyformPathArc::BodyOf],
+            },
+        ];
+
+        assert_eq!(detect_common_cse_root(Some(&ceiling), &instances), None);
+    }
 }
