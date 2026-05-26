@@ -443,14 +443,13 @@ fn detect_common_cse_root(
     // Back it up to the body of a let binding or where we've removed a variable from
     // its own scope, which can be true if an assign form is not in a body position.
     for (idx, f) in target_path.iter().enumerate().rev() {
-        if f == &BodyformPathArc::BodyOf {
-            return Some(target_path.iter().take(idx + 1).cloned().collect());
-        }
-
         if let Some(ceiling) = ceiling {
             if ceiling.len() > idx || (ceiling.len() == idx && target_path[0..idx] != *ceiling) {
                 return None;
             }
+        }
+        if f == &BodyformPathArc::BodyOf {
+            return Some(target_path.iter().take(idx + 1).cloned().collect());
         }
     }
 
